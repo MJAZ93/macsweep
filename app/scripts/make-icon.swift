@@ -24,7 +24,7 @@ NSGraphicsContext.current?.restoreGraphicsState()
 NSGradient(colors: [NSColor(red: 0.60, green: 0.38, blue: 0.98, alpha: 1),
                     NSColor(red: 0.36, green: 0.13, blue: 0.75, alpha: 1)])!.draw(in: shape, angle: -90)
 
-// broom handle + sweep line, as in the favicon of the old web page
+// broom handle + sweep line
 NSColor.white.setStroke()
 let handle = NSBezierPath()
 handle.move(to: NSPoint(x: 318, y: 318))
