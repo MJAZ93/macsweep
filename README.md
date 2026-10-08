@@ -48,13 +48,17 @@ One afternoon later: **158 GB free**. `macsweep` is that afternoon, turned into 
 curl -fsSL https://raw.githubusercontent.com/MJAZ93/macsweep/main/install.sh | bash
 ```
 
-Or just grab the file:
+The installer drops one file into the first writable directory already on your `PATH`: `/opt/homebrew/bin`, then `/usr/local/bin`, then `~/.local/bin` (in which case it adds that directory to your `~/.zshrc` or `~/.bashrc`). If your current terminal was opened before the install, run `exec $SHELL` or open a new tab once.
+
+Or just grab the file yourself:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MJAZ93/macsweep/main/macsweep -o /usr/local/bin/macsweep && chmod +x /usr/local/bin/macsweep
+curl -fsSL https://raw.githubusercontent.com/MJAZ93/macsweep/main/macsweep -o /opt/homebrew/bin/macsweep && chmod +x /opt/homebrew/bin/macsweep
 ```
 
 It is a single bash script. No Homebrew, no Python, no Node. Works with the bash 3.2 that ships with macOS.
+
+**Update:** run the install command again. **Uninstall:** `rm "$(which macsweep)"`.
 
 ## Usage
 
@@ -143,6 +147,14 @@ macsweep              # análise: mede tudo, não apaga nada
 macsweep clean        # interactivo: pergunta sim / não por item
 macsweep clean --yes  # pré-selecciona todos os SEGUROS (confirmas no fim)
 ```
+
+Instalar:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/MJAZ93/macsweep/main/install.sh | bash
+```
+
+O instalador põe um único ficheiro na primeira pasta com escrita que já esteja no teu `PATH` (`/opt/homebrew/bin`, depois `/usr/local/bin`, depois `~/.local/bin`). Se o terminal já estava aberto antes de instalar, corre `exec $SHELL` ou abre uma aba nova. Para actualizar, repete o comando.
 
 A interface muda para português automaticamente quando o teu `LANG` é `pt_*`, ou força com `--lang pt`. As teclas passam a ser `s` (sim), `n` (não), `t` (todos os seguros), `r` (resto não), `q` (sair), e a confirmação final é a palavra `APAGAR`.
 
