@@ -66,6 +66,7 @@ It is a single bash script. No Homebrew, no Python, no Node. Works with the bash
 macsweep              # scan: measures everything, deletes nothing
 macsweep clean        # interactive: asks yes / no for every item
 macsweep clean --yes  # pre-select every SAFE item (you still confirm at the end)
+macsweep ui           # the same thing in a browser window
 ```
 
 <p align="center">
@@ -84,6 +85,20 @@ Every item is one keypress:
 
 At the end you get a summary with the total and have to type `DELETE` before anything happens. Then it deletes, shows how much it freed, and writes a log to `~/Library/Logs/macsweep.log`.
 
+### Browser UI
+
+```bash
+macsweep ui
+```
+
+<p align="center">
+  <img src="docs/ui.png" alt="macsweep ui" width="820">
+</p>
+
+Prefer clicking to typing? `macsweep ui` runs the same scan, then opens a page in your browser with everything grouped by tier and sorted by size: tick what you want, see how much space you will have afterwards, review the list, type `DELETE`, and watch each item finish. The rules are the same as in the terminal: items in use cannot be selected, **Select all safe** only ever touches SAFE items, nothing is deleted without the typed confirmation, and every deletion goes to the same log. The one step that needs an admin password asks for it in the normal macOS dialog.
+
+The page is served by a small local server that only listens on `127.0.0.1`, and only the tab that `macsweep` opens holds the random access token. Leave the terminal open while you use it; **Quit** in the page or `Ctrl+C` stops it. It needs `python3`, which comes with the Xcode Command Line Tools (if `git` works on your Mac, you have them). All the options below work with `ui` too, plus `--no-open` to print the link instead of opening the browser.
+
 ### Options
 
 | flag | default | what |
@@ -95,6 +110,7 @@ At the end you get a summary with the total and have to type `DELETE` before any
 | `--dry-run` | | go through the whole flow, delete nothing |
 | `--lang en\|pt` | from `$LANG` | interface language |
 | `--no-color` | | plain output |
+| `--no-open` | | `ui` only: print the link, do not open the browser |
 
 ## What it finds
 
@@ -146,7 +162,10 @@ MIT © [Afonso Júnior](https://github.com/MJAZ93)
 macsweep              # análise: mede tudo, não apaga nada
 macsweep clean        # interactivo: pergunta sim / não por item
 macsweep clean --yes  # pré-selecciona todos os SEGUROS (confirmas no fim)
+macsweep ui           # o mesmo, numa janela do browser
 ```
+
+Com `macsweep ui` a análise é a mesma, mas escolhes tudo numa página no browser: marcas o que queres apagar, vês quanto espaço vais ter no fim, revês a lista e escreves `APAGAR` para confirmar. As regras são as do terminal: o que está em uso não se pode seleccionar, **Seleccionar todos os seguros** só mexe nos SEGUROS e tudo fica registado no mesmo ficheiro. A página só está acessível em `127.0.0.1` e só o separador que o `macsweep` abre tem o código de acesso. Deixa o terminal aberto enquanto a usas; **Sair** ou `Ctrl+C` terminam. Precisa de `python3`, que vem com as Command Line Tools do Xcode.
 
 Instalar:
 

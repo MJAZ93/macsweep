@@ -9,13 +9,14 @@
 #  Usage:   macsweep              scan only (never deletes)
 #           macsweep clean        interactive: asks yes/no per item
 #           macsweep clean --yes  auto-select every SAFE item (still confirms)
+#           macsweep ui           same cleanup in a browser window (local only)
 #           macsweep --help
 #
 #  Works on bash 3.2 (the one that ships with macOS). No dependencies.
 #  https://github.com/MJAZ93/macsweep
 # ──────────────────────────────────────────────────────────────────────────────
 set -u
-VERSION="1.0.0"
+VERSION="1.1.0"
 
 # ── options ───────────────────────────────────────────────────────────────────
 MODE="scan"
@@ -27,11 +28,16 @@ FAST=0
 LANG_UI=""
 MIN_MB=50               # hide items smaller than this
 LOG_FILE="$HOME/Library/Logs/macsweep.log"
+NO_OPEN=0
+UI_DIR=""; EXEC_IDS=""; UI_EXEC=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
     scan)            MODE="scan" ;;
     clean)           MODE="clean" ;;
+    ui|gui)          MODE="ui" ;;
+    __scan)          MODE="__scan"; UI_DIR="$2"; shift ;;          # internal: used by the UI server
+    __exec)          MODE="__exec"; UI_DIR="$2"; EXEC_IDS="$3"; shift 2 ;;
     --projects)      PROJECTS_DIR="$2"; shift ;;
     --days)          INACTIVE_DAYS="$2"; shift ;;
     --yes|-y)        AUTO_YES=1 ;;
@@ -40,6 +46,7 @@ while [ $# -gt 0 ]; do
     --lang)          LANG_UI="$2"; shift ;;
     --min-mb)        MIN_MB="$2"; shift ;;
     --no-color)      NO_COLOR=1 ;;
+    --no-open)       NO_OPEN=1 ;;
     -v|--version)    echo "macsweep $VERSION"; exit 0 ;;
     -h|--help)       MODE="help" ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
@@ -89,6 +96,7 @@ t() {
       hint_all)  echo "'t' selecciona todos os SEGUROS de uma vez; os VERIFICAR são sempre um a um." ;;
       log)       echo "Registo em" ;;
       no_tty)    echo "Sem terminal interactivo; a correr só análise." ;;
+      no_python) echo "A interface precisa de python3 (vem com as Command Line Tools). Instala com: xcode-select --install" ;;
     esac
   else
     case "$1" in
@@ -125,6 +133,7 @@ t() {
       hint_all)  echo "'a' selects every SAFE item at once; REVIEW items are always one by one." ;;
       log)       echo "Log at" ;;
       no_tty)    echo "No interactive terminal; running scan only." ;;
+      no_python) echo "The UI needs python3 (it ships with the Command Line Tools). Install with: xcode-select --install" ;;
     esac
   fi
 }
@@ -177,7 +186,7 @@ disk_line() {
     tot=$2/1048576; avail=$4/1048576; pct=100-($4*100/$2);
     col=(pct>90)?Rd:(pct>75)?Y:G;
     bar=""; n=int(pct/2.5); for(i=0;i<40;i++) bar=bar ((i<n)?"█":"░");
-    printf "  %s%s%s%s  %s%5.1f GB%s %s %s%.0f GB%s  (%.0f%% %s)\n", B, col, bar, R, B, avail, R, f, B, tot, R, pct, u }'
+    printf "  %s%s%s%s  %s%5.1f GB%s %s %s %s%.0f GB%s  (%.0f%% %s)\n", B, col, bar, R, B, avail, R, f, o, B, tot, R, pct, u }'
 }
 
 # ── running apps ──────────────────────────────────────────────────────────────
@@ -216,11 +225,24 @@ h_rm()             { printf '%s' "$1" | tr '\n' '\0' | xargs -0 rm -rf; }
 h_brew()           { brew cleanup --prune=all >/dev/null 2>&1; h_rm "$1"; }
 h_sim_unavail()    { xcrun simctl delete unavailable >/dev/null 2>&1; }
 h_sim_runtime()    { xcrun simctl shutdown all >/dev/null 2>&1; xcrun simctl runtime delete "$2" >/dev/null 2>&1; sleep 3; xcrun simctl delete unavailable >/dev/null 2>&1; }
-h_sudo_rm()        { echo; echo "  $(t sudo_note)"; printf '%s' "$1" | tr '\n' '\0' | sudo xargs -0 rm -rf 2>/dev/null; true; }
+h_sudo_rm()        { if [ $UI_EXEC -eq 1 ]; then   # no terminal: ask for the password with the native macOS dialog
+                       printf '%s' "$1" | while IFS= read -r p; do [ -n "$p" ] && osascript -e 'on run argv' \
+                         -e 'do shell script "rm -rf " & quoted form of (item 1 of argv) with administrator privileges' -e 'end run' "$p" </dev/null; done
+                       return 0; fi
+                     echo; echo "  $(t sudo_note)"; printf '%s' "$1" | tr '\n' '\0' | sudo xargs -0 rm -rf 2>/dev/null; true; }
 h_docker_prune()   { docker system prune -a -f >/dev/null 2>&1; }
 h_worktree()       { local d repo; d=$(printf '%s' "$1" | head -1); repo="$2"
                      git -C "$repo" worktree remove --force "$d" >/dev/null 2>&1 || rm -rf "$d"; git -C "$repo" worktree prune >/dev/null 2>&1; }
 h_trash()          { osascript -e 'tell application "Finder" to empty trash' >/dev/null 2>&1; }
+
+log_start()  { mkdir -p "$(dirname "$LOG_FILE")"; echo "== $(date '+%Y-%m-%d %H:%M') macsweep $VERSION${1:-}" >> "$LOG_FILE"; }
+delete_item() {  # runs the handler of item $1 and logs it
+  local i="$1" h="${I_HANDLER[$1]}" arg=""
+  case "$h" in *" "*) arg="${h#* }"; h="${h%% *}" ;; esac
+  case "$h" in rm|brew|sim_unavail|sim_runtime|sudo_rm|docker_prune|worktree|trash) ;; *) return 1 ;; esac
+  "h_$h" "${I_PATHS[$i]}" "$arg"
+  printf '%s\t%s\n' "${I_LABEL[$i]}" "$(printf '%s' "${I_PATHS[$i]}" | tr '\n' ' ')" >> "$LOG_FILE"
+}
 
 # ── scan ──────────────────────────────────────────────────────────────────────
 scan() {
@@ -439,16 +461,13 @@ execute() {
   [ "$ans" = "$(t confirm_w)" ] || { echo "  $(t cancelled)"; return 0; }
 
   local before after; before=$(disk_free_k)
-  mkdir -p "$(dirname "$LOG_FILE")"; echo "== $(date '+%Y-%m-%d %H:%M') macsweep $VERSION" >> "$LOG_FILE"
+  log_start
   hdr "$(t deleting)"
   for ((i=0;i<N;i++)); do
     [ "${I_SEL[$i]}" = "1" ] || continue
     printf '  %s…%s %s' "$CYN" "$R" "${I_LABEL[$i]}"
-    local h="${I_HANDLER[$i]}" arg=""
-    case "$h" in *" "*) arg="${h#* }"; h="${h%% *}" ;; esac
-    "h_$h" "${I_PATHS[$i]}" "$arg"
+    delete_item "$i"
     printf '\r  %s✔%s %s\n' "$GRN" "$R" "${I_LABEL[$i]}"
-    printf '%s\t%s\n' "${I_LABEL[$i]}" "$(printf '%s' "${I_PATHS[$i]}" | tr '\n' ' ')" >> "$LOG_FILE"
   done
   after=$(disk_free_k)
   echo; line
@@ -457,13 +476,757 @@ execute() {
   printf '  %s%s %s%s\n' "$D" "$(t log)" "$LOG_FILE" "$R"
 }
 
+# ── ui (macsweep ui) ──────────────────────────────────────────────────────────
+# The browser UI is a page served by a small python3 server bound to 127.0.0.1.
+# Bash still owns everything that matters: the scan, the catalog and the
+# handlers. The server only re-invokes this script (__scan / __exec) and passes
+# the results on. Every API call needs a random token that only the opened tab
+# knows, and the delete call needs the confirmation word, like the terminal.
+ui_dump() {  # writes the catalog NUL-separated: 10 header fields, then 7 per item
+  local f="$1" i
+  {
+    printf '%s\0' "macsweep-ui-1" "$VERSION" "$LANG_UI" "$(df -k / | awk 'NR==2{print $2}')" "$(disk_free_k)" \
+                  "$PROJECTS_DIR" "$DRY_RUN" "$MIN_MB" "$LOG_FILE" "$N"
+    for ((i=0;i<N;i++)); do
+      printf '%s\0' "${I_TIER[$i]}" "${I_LABEL[$i]}" "${I_NOTE[$i]}" "${I_BLOCK[$i]}" "${I_HANDLER[$i]}" "${I_SIZE[$i]:-0}" "${I_PATHS[$i]}"
+    done
+  } > "$f.tmp" && mv "$f.tmp" "$f"
+}
+ui_load() {
+  local x i b f=()
+  while IFS= read -r -d '' x; do f[${#f[@]}]="$x"; done < "$1"
+  [ "${f[0]:-}" = "macsweep-ui-1" ] || return 1
+  N=${f[9]}
+  for ((i=0;i<N;i++)); do
+    b=$((10 + i*7))
+    I_TIER[$i]="${f[$b]}"; I_LABEL[$i]="${f[$((b+1))]}"; I_NOTE[$i]="${f[$((b+2))]}"; I_BLOCK[$i]="${f[$((b+3))]}"
+    I_HANDLER[$i]="${f[$((b+4))]}"; I_SIZE[$i]="${f[$((b+5))]}"; I_PATHS[$i]="${f[$((b+6))]}"; I_SEL[$i]=0
+  done
+}
+ui_exec() {  # $1 = comma-separated item ids; prints S/D/F lines for the server
+  local id before after
+  before=$(disk_free_k)
+  [ $DRY_RUN -eq 1 ] || log_start " (ui)"
+  for id in $(printf '%s' "$1" | tr ',' ' '); do
+    case "$id" in ''|*[!0-9]*) continue ;; esac
+    [ "$id" -lt "$N" ] || continue
+    { [ -z "${I_BLOCK[$id]}" ] && [ "${I_HANDLER[$id]}" != "none" ]; } || continue
+    printf 'S\t%s\n' "$id"
+    if [ $DRY_RUN -eq 1 ]; then sleep 0.3; else delete_item "$id" >/dev/null 2>&1; fi
+    printf 'D\t%s\n' "$id"
+  done
+  after=$(disk_free_k)
+  printf 'F\t%s\t%s\n' "$((after - before))" "$after"
+}
+ui_python() {
+  local py; py=$(command -v python3 2>/dev/null)
+  # /usr/bin/python3 is only a stub until the Command Line Tools are installed
+  if [ -z "$py" ] || { [ "$py" = "/usr/bin/python3" ] && [ "$(uname)" = "Darwin" ] && ! xcode-select -p >/dev/null 2>&1; }; then
+    printf '%s\n' "$(t no_python)" >&2; return 1
+  fi
+  printf '%s\n' "$py"
+}
+ui_main() {
+  local py self fwd
+  py=$(ui_python) || return 1
+  case "$0" in /*) self="$0" ;; *) self="$PWD/$0" ;; esac
+  UI_DIR=$(mktemp -d "${TMPDIR:-/tmp}/macsweep-ui.XXXXXX") || return 1
+  trap 'rm -rf "$UI_DIR"' EXIT
+  ui_server_py > "$UI_DIR/server.py"; ui_page > "$UI_DIR/index.html"
+  fwd=(--days "$INACTIVE_DAYS" --min-mb "$MIN_MB" --lang "$LANG_UI")
+  [ -n "$PROJECTS_DIR" ] && fwd=("${fwd[@]}" --projects "$PROJECTS_DIR")
+  [ $FAST -eq 1 ] && fwd=("${fwd[@]}" --fast)
+  [ $DRY_RUN -eq 1 ] && fwd=("${fwd[@]}" --dry-run)
+  banner
+  disk_line
+  scan
+  ui_dump "$UI_DIR/scan.dat"
+  [ $NO_OPEN -eq 1 ] && export MACSWEEP_NO_OPEN=1
+  "$py" "$UI_DIR/server.py" "$UI_DIR" "$self" "${fwd[@]}"
+}
+ui_server_py() { cat <<'PY'
+import json, os, secrets, shutil, subprocess, sys, threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+UI_DIR, SELF, OPTS = sys.argv[1], sys.argv[2], sys.argv[3:]
+DUMP = os.path.join(UI_DIR, "scan.dat")
+TOKEN = secrets.token_urlsafe(24)
+BUSY = threading.Lock()
+CONFIRM = {"en": "DELETE", "pt": "APAGAR"}
+MSG = {
+    "en": ("macsweep is open in your browser:", "Leave this terminal open. Ctrl+C (or Quit in the page) stops it.", "stopped."),
+    "pt": ("O macsweep está aberto no browser:", "Deixa este terminal aberto. Ctrl+C (ou Sair na página) termina.", "terminado."),
+}
+
+
+def num(s):
+    try:
+        return int(s)
+    except ValueError:
+        return 0
+
+
+def load_state():
+    with open(DUMP, "rb") as fh:
+        f = fh.read().decode("utf-8", "replace").split("\0")
+    if f[0] != "macsweep-ui-1":
+        raise ValueError("unexpected scan file")
+    st = {"version": f[1], "lang": f[2], "disk": {"total_k": num(f[3]), "free_k": num(f[4])},
+          "projects": f[5], "dry_run": f[6] == "1", "min_mb": num(f[7]), "log": f[8], "items": []}
+    for i in range(num(f[9])):
+        tier, label, note, block, handler, size, paths = f[10 + i * 7:17 + i * 7]
+        st["items"].append({
+            "id": i, "tier": tier, "label": label, "note": note,
+            "block": block[1:] if block.startswith("!") else block,
+            "block_msg": block.startswith("!"),
+            "blocked": bool(block) or handler == "none",
+            "size_k": num(size), "paths": [p for p in paths.split("\n") if p],
+        })
+    return st
+
+
+def run_self(*args):
+    return ["bash", SELF] + list(args) + OPTS
+
+
+STATE = load_state()
+with open(os.path.join(UI_DIR, "index.html"), "rb") as fh:
+    PAGE = fh.read()
+
+
+class Handler(BaseHTTPRequestHandler):
+    server_version = "macsweep"
+    sys_version = ""
+
+    def log_message(self, *a):
+        pass
+
+    def send(self, code, body, ctype="application/json"):
+        if not isinstance(body, bytes):
+            body = json.dumps(body).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
+        if ctype.startswith("text/html"):
+            self.send_header("Content-Security-Policy",
+                             "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
+                             "connect-src 'self'; img-src data:; frame-ancestors 'none'")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def host_ok(self):  # blocks DNS-rebinding: only our own address is accepted
+        return self.headers.get("Host") in ("127.0.0.1:%d" % PORT, "localhost:%d" % PORT)
+
+    def authed(self):
+        return self.host_ok() and secrets.compare_digest(self.headers.get("X-Macsweep-Token", ""), TOKEN)
+
+    def do_GET(self):
+        path = self.path.split("?")[0]
+        if not self.host_ok():
+            return self.send(403, {"error": "forbidden"})
+        if path in ("/", "/index.html"):
+            return self.send(200, PAGE, "text/html; charset=utf-8")
+        if path == "/api/state":
+            if not self.authed():
+                return self.send(403, {"error": "forbidden"})
+            return self.send(200, STATE)
+        self.send(404, {"error": "not found"})
+
+    def do_POST(self):
+        global STATE
+        path = self.path.split("?")[0]
+        if not self.authed():
+            return self.send(403, {"error": "forbidden"})
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+            body = json.loads(self.rfile.read(n) or b"{}") if n else {}
+        except ValueError:
+            return self.send(400, {"error": "bad request"})
+
+        if path == "/api/quit":
+            self.send(200, {"ok": True})
+            threading.Thread(target=self.server.shutdown, daemon=True).start()
+            return
+
+        if not BUSY.acquire(blocking=False):
+            return self.send(409, {"error": "busy"})
+        try:
+            if path == "/api/scan":
+                subprocess.run(run_self("__scan", UI_DIR), stdin=subprocess.DEVNULL,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                STATE = load_state()
+                return self.send(200, STATE)
+            if path == "/api/delete":
+                return self.delete(body)
+            self.send(404, {"error": "not found"})
+        finally:
+            BUSY.release()
+
+    def delete(self, body):
+        if body.get("confirm") != CONFIRM.get(STATE["lang"], "DELETE"):
+            return self.send(400, {"error": "confirmation word missing"})
+        items = STATE["items"]
+        ids = []
+        for i in body.get("ids") or []:
+            if isinstance(i, int) and 0 <= i < len(items) and not items[i]["blocked"] and i not in ids:
+                ids.append(i)
+        if not ids:
+            return self.send(400, {"error": "nothing selected"})
+        # stream progress as NDJSON; HTTP/1.0 closes the connection at the end
+        self.send_response(200)
+        self.send_header("Content-Type", "application/x-ndjson")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        p = subprocess.Popen(run_self("__exec", UI_DIR, ",".join(map(str, ids))), stdin=subprocess.DEVNULL,
+                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, universal_newlines=True)
+        alive = True
+        for line in p.stdout:  # keep reading even if the tab went away: deletion runs to the end
+            f = line.rstrip("\n").split("\t")
+            if f[0] == "S":
+                ev = {"event": "start", "id": num(f[1])}
+            elif f[0] == "D":
+                ev = {"event": "done", "id": num(f[1])}
+            elif f[0] == "F" and len(f) > 2:
+                ev = {"event": "finished", "freed_k": num(f[1]), "free_k": num(f[2]), "dry_run": STATE["dry_run"]}
+            else:
+                continue
+            if alive:
+                try:
+                    self.wfile.write((json.dumps(ev) + "\n").encode())
+                    self.wfile.flush()
+                except OSError:
+                    alive = False
+        p.wait()
+
+
+server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+server.daemon_threads = True
+PORT = server.server_address[1]
+url = "http://127.0.0.1:%d/#%s" % (PORT, TOKEN)
+m = MSG.get(STATE["lang"], MSG["en"])
+print("\n  %s\n  \033[1m%s\033[0m\n\n  %s\n" % (m[0], url, m[1]) if sys.stdout.isatty() else "%s %s" % (m[0], url), flush=True)
+if not os.environ.get("MACSWEEP_NO_OPEN") and shutil.which("open"):
+    subprocess.Popen(["open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+try:
+    server.serve_forever()
+except KeyboardInterrupt:
+    pass
+print("  macsweep ui %s" % m[2])
+PY
+}
+ui_page() { cat <<'HTML'
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>macsweep</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%237c3aed'/%3E%3Cpath d='M9 22l9-12m-4 14h10' stroke='white' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #f5f5f7; --glass: rgba(245,245,247,.82); --panel: #fff; --ink: #1d1d1f; --muted: #6e6e73; --faint: #a1a1a6;
+  --line: #e3e3e8; --soft: #efeff3; --hover: #f8f8fa;
+  --accent: #6d28d9; --accent-ink: #fff;
+  --safe: #15803d; --safe-bg: #e6f5ec; --rebuild: #a16207; --rebuild-bg: #fdf3dc; --review: #c62828; --review-bg: #fdecea;
+  --warn: #a16207; --danger: #d92d20; --danger-ink: #fff;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111113; --glass: rgba(17,17,19,.82); --panel: #1b1b1e; --ink: #f2f2f5; --muted: #9b9ba3; --faint: #6b6b73;
+    --line: #2a2a2f; --soft: #232327; --hover: #202024;
+    --accent: #a78bfa; --accent-ink: #160b2e;
+    --safe: #4ade80; --safe-bg: rgba(74,222,128,.12); --rebuild: #fbbf24; --rebuild-bg: rgba(251,191,36,.12);
+    --review: #f87171; --review-bg: rgba(248,113,113,.12);
+    --warn: #fbbf24; --danger: #ef4444; --danger-ink: #fff; --shadow: none;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased; padding-bottom: 96px; }
+button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; }
+button:disabled { cursor: default; opacity: .45; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wrap { max-width: 980px; margin: 0 auto; padding: 0 20px; }
+.num { font-variant-numeric: tabular-nums; }
+
+header { position: sticky; top: 0; z-index: 10; background: var(--glass); backdrop-filter: saturate(180%) blur(16px);
+  -webkit-backdrop-filter: saturate(180%) blur(16px); border-bottom: 1px solid var(--line); }
+.bar-top { display: flex; align-items: center; gap: 16px; height: 60px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; letter-spacing: -.01em; }
+.brand svg { width: 28px; height: 28px; flex: none; }
+.brand small { font-weight: 500; color: var(--muted); font-size: 12px; }
+.spacer { flex: 1; }
+.btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px; border-radius: 8px; font-weight: 500;
+  background: var(--soft); transition: background .15s; white-space: nowrap; }
+.btn:hover:not(:disabled) { background: var(--line); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover:not(:disabled) { filter: brightness(1.08); background: var(--accent); }
+.btn.danger { background: var(--danger); color: var(--danger-ink); }
+.btn.danger:hover:not(:disabled) { filter: brightness(1.08); background: var(--danger); }
+.btn.ghost { background: transparent; color: var(--muted); }
+.btn.ghost:hover:not(:disabled) { background: var(--soft); color: var(--ink); }
+.btn svg { width: 15px; height: 15px; }
+
+.disk { padding: 22px 0 6px; }
+.disk-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.disk-free { font-size: 30px; font-weight: 700; letter-spacing: -.02em; }
+.disk-sub { color: var(--muted); }
+.disk-after { margin-left: auto; color: var(--safe); font-weight: 600; }
+.meter { position: relative; height: 12px; border-radius: 6px; background: var(--soft); overflow: hidden; display: flex; }
+.meter > span { height: 100%; transition: width .35s ease; }
+.meter .used { background: var(--muted); opacity: .55; }
+.meter .used.hot { background: var(--review); opacity: .8; }
+.meter .used.warm { background: var(--rebuild); opacity: .8; }
+.meter .sel { background: repeating-linear-gradient(-45deg, var(--safe) 0 4px, transparent 4px 7px); background-color: var(--safe-bg); }
+.meta { color: var(--faint); font-size: 12px; margin-top: 8px; display: flex; gap: 14px; flex-wrap: wrap; }
+
+.banner { margin-top: 14px; padding: 10px 14px; border-radius: 10px; background: var(--rebuild-bg); color: var(--rebuild); font-weight: 600; }
+
+.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 22px 0 8px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; text-align: left; box-shadow: var(--shadow);
+  display: flex; flex-direction: column; gap: 4px; transition: transform .12s; }
+.card:hover { transform: translateY(-1px); }
+.card .total { font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
+.card .desc { color: var(--muted); font-size: 12.5px; }
+.badge { display: inline-flex; align-self: flex-start; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  padding: 3px 8px; border-radius: 6px; }
+.badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.t-SAFE { color: var(--safe); background: var(--safe-bg); }
+.t-REBUILD { color: var(--rebuild); background: var(--rebuild-bg); }
+.t-REVIEW { color: var(--review); background: var(--review-bg); }
+
+section.tier { margin-top: 28px; scroll-margin-top: 76px; }
+.tier-head { display: flex; align-items: center; gap: 12px; padding: 0 4px 10px; flex-wrap: wrap; }
+.tier-head .total { font-weight: 700; }
+.tier-head .desc { color: var(--muted); }
+.tier-head .btn { margin-left: auto; height: 28px; font-size: 13px; }
+.list { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; box-shadow: var(--shadow); }
+.empty { padding: 18px; color: var(--faint); }
+
+.row { border-top: 1px solid var(--line); position: relative; display: flow-root; }
+.row:first-child { border-top: 0; }
+.row.on { background: var(--hover); }
+.row label { display: grid; grid-template-columns: 22px 84px 1fr; gap: 14px; align-items: start; padding: 13px 18px 13px 16px; cursor: pointer; }
+.row.blocked label { cursor: default; }
+.row:not(.blocked):hover { background: var(--hover); }
+.check { appearance: none; -webkit-appearance: none; width: 20px; height: 20px; margin: 1px 0 0; border-radius: 6px; border: 1.5px solid var(--faint);
+  display: grid; place-items: center; cursor: inherit; transition: background .12s, border-color .12s; }
+.check::after { content: ""; width: 10px; height: 6px; border: 2px solid var(--accent-ink); border-top: 0; border-right: 0; transform: rotate(-45deg) translate(1px,-1px); opacity: 0; }
+.check:checked { background: var(--accent); border-color: var(--accent); }
+.check:checked::after { opacity: 1; }
+.check:disabled { opacity: .35; }
+.size { font-weight: 700; text-align: right; white-space: nowrap; }
+.size.zero { color: var(--faint); font-weight: 500; }
+.label { font-weight: 600; word-break: break-word; }
+.note { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.warn { color: var(--warn); font-size: 13px; margin-top: 4px; font-weight: 500; }
+.sizebar { position: absolute; left: 0; bottom: 0; height: 2px; background: var(--accent); opacity: .35; }
+.paths { margin: -6px 18px 12px 152px; font-size: 12px; color: var(--muted); }
+.paths summary { cursor: pointer; color: var(--faint); list-style: none; display: inline-flex; align-items: center; gap: 4px; }
+.paths summary::-webkit-details-marker { display: none; }
+.paths summary::before { content: "›"; display: inline-block; transition: transform .15s; font-size: 14px; }
+.paths[open] summary::before { transform: rotate(90deg); }
+.paths code { display: block; font: 11.5px/1.5 ui-monospace, "SF Mono", Menlo, monospace; word-break: break-all; color: var(--muted); padding-left: 12px; }
+
+.footer { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background: var(--glass); backdrop-filter: saturate(180%) blur(16px);
+  -webkit-backdrop-filter: saturate(180%) blur(16px); border-top: 1px solid var(--line); transform: translateY(100%); visibility: hidden;
+  transition: transform .2s ease, visibility .2s; }
+.footer.show { transform: none; visibility: visible; }
+.footer .wrap { display: flex; align-items: center; gap: 14px; height: 68px; }
+.footer .sum { font-weight: 600; }
+.footer .sum b { font-size: 18px; }
+
+dialog { border: 0; border-radius: 16px; padding: 0; width: min(560px, calc(100vw - 32px)); background: var(--panel); color: var(--ink);
+  box-shadow: 0 24px 80px rgba(0,0,0,.35); }
+dialog::backdrop { background: rgba(0,0,0,.4); backdrop-filter: blur(2px); }
+.dlg { padding: 22px 24px; }
+.dlg h2 { margin: 0 0 4px; font-size: 19px; letter-spacing: -.01em; }
+.dlg .sub { color: var(--muted); margin: 0 0 16px; }
+.dlg-list { max-height: 42vh; overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
+.dlg-item { display: grid; grid-template-columns: 22px 1fr auto; gap: 10px; align-items: center; padding: 9px 12px; border-top: 1px solid var(--line); }
+.dlg-item:first-child { border-top: 0; }
+.dlg-item .size { font-size: 13px; }
+.dlg-item .label { font-weight: 500; font-size: 13.5px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; margin: auto; }
+.dot.SAFE { background: var(--safe); } .dot.REBUILD { background: var(--rebuild); } .dot.REVIEW { background: var(--review); }
+.dlg-total { display: flex; justify-content: space-between; padding: 12px 2px 0; font-weight: 700; }
+.dlg-confirm { margin-top: 18px; }
+.dlg-confirm label { display: block; color: var(--muted); margin-bottom: 6px; }
+.dlg-confirm input { width: 100%; height: 40px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--bg); color: var(--ink);
+  padding: 0 12px; font: 600 15px ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .08em; }
+.dlg-confirm input:focus { outline: none; border-color: var(--danger); }
+.dlg-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+.st { width: 18px; height: 18px; display: grid; place-items: center; color: var(--faint); }
+.st.done { color: var(--safe); }
+.st svg { width: 16px; height: 16px; }
+.spin { width: 15px; height: 15px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent); animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.result { text-align: center; padding: 6px 0 4px; }
+.result .big { font-size: 34px; font-weight: 800; letter-spacing: -.02em; color: var(--safe); }
+.result .log { color: var(--faint); font-size: 12px; margin-top: 10px; word-break: break-all; }
+
+.veil { position: fixed; inset: 0; z-index: 20; display: none; place-items: center; background: var(--glass); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+.veil.show { display: grid; }
+.veil .box { display: flex; flex-direction: column; align-items: center; gap: 14px; color: var(--muted); font-weight: 500; }
+.veil .spin { width: 28px; height: 28px; border-width: 3px; }
+.toast { position: fixed; left: 50%; bottom: 88px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 10px;
+  font-weight: 500; z-index: 30; display: none; max-width: calc(100vw - 32px); }
+.toast.show { display: block; }
+
+@media (max-width: 680px) {
+  .cards { grid-template-columns: 1fr; }
+  .row label { grid-template-columns: 22px 62px 1fr; gap: 10px; padding-right: 14px; }
+  .paths { margin-left: 124px; }
+  .brand small { display: none; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap bar-top">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--accent)"/><path d="M9 22l9-12m-4 14h10" stroke="var(--accent-ink)" stroke-width="3" stroke-linecap="round" fill="none"/></svg>
+      <span>macsweep</span> <small id="tagline"></small>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn" id="rescan"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3"/></svg><span></span></button>
+    <button class="btn ghost" id="quit"></button>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="disk">
+    <div class="disk-head">
+      <span class="disk-free num" id="free"></span>
+      <span class="disk-sub num" id="freeSub"></span>
+      <span class="disk-after num" id="after"></span>
+    </div>
+    <div class="meter" id="meter"><span class="used"></span><span class="sel"></span></div>
+    <div class="meta" id="meta"></div>
+  </div>
+  <div class="banner" id="dry" hidden></div>
+  <div class="cards" id="cards"></div>
+  <div id="tiers"></div>
+</main>
+
+<div class="footer" id="footer">
+  <div class="wrap">
+    <div class="sum"><b class="num" id="selSize"></b> <span id="selCount"></span></div>
+    <div class="spacer"></div>
+    <button class="btn ghost" id="clear"></button>
+    <button class="btn danger" id="review"></button>
+  </div>
+</div>
+
+<dialog id="confirm">
+  <form class="dlg" method="dialog" id="confirmForm">
+    <h2 id="cTitle"></h2>
+    <p class="sub" id="cSub"></p>
+    <div class="dlg-list" id="cList"></div>
+    <div class="dlg-total"><span id="cTotalL"></span><span class="num" id="cTotal"></span></div>
+    <div class="dlg-confirm">
+      <label for="cWord" id="cHint"></label>
+      <input id="cWord" autocomplete="off" autocapitalize="characters" spellcheck="false">
+    </div>
+    <div class="dlg-actions">
+      <button class="btn" type="button" id="cCancel"></button>
+      <button class="btn danger" value="ok" id="cOk" disabled></button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="progress">
+  <div class="dlg">
+    <h2 id="pTitle"></h2>
+    <p class="sub" id="pSub"></p>
+    <div class="dlg-list" id="pList"></div>
+    <div class="result" id="pResult" hidden></div>
+    <div class="dlg-actions"><button class="btn primary" id="pClose" disabled></button></div>
+  </div>
+</dialog>
+
+<div class="veil" id="veil"><div class="box"><div class="spin"></div><span id="veilText"></span></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+const TOKEN = location.hash.slice(1);
+const TIERS = ["SAFE", "REBUILD", "REVIEW"];
+const I18N = {
+  en: {
+    tagline: "disk cleanup for developer Macs", free: "free", of: "of", used: "used", rescan: "Rescan", quit: "Quit",
+    SAFE: "SAFE", REBUILD: "REBUILD", REVIEW: "REVIEW",
+    SAFE_d: "Caches that tools recreate on their own", REBUILD_d: "Deletable, but you will reinstall or rebuild",
+    REVIEW_d: "May hold your data: decide one by one",
+    items: n => n === 1 ? "1 item" : n + " items", selectSafe: "Select all safe", inuse: "In use: close",
+    nothing: n => "Nothing found above " + n + " MB", selected: n => n === 1 ? "1 item selected" : n + " items selected",
+    clear: "Deselect all", review: "Review & delete…", after: v => v + " free after cleanup",
+    projects: "Projects", minmb: n => "Hiding items under " + n + " MB", log: "Log at",
+    dry: "Dry run: you can go through the whole flow, nothing will be deleted.",
+    cTitle: n => n === 1 ? "Delete 1 item?" : "Delete " + n + " items?",
+    cSub: "This cannot be undone. Items marked REVIEW may hold your data.", total: "Total",
+    cHint: w => "Type " + w + " to confirm", word: "DELETE", cancel: "Cancel", del: "Delete",
+    pTitle: "Deleting", pTitleDry: "Dry run", pSub: "Apps that need a password will ask for it in a macOS dialog.",
+    done: "Done", freed: "freed", dryDone: "Dry run finished. Nothing was deleted.", close: "Close",
+    measuring: "Measuring…", paths: n => n === 1 ? "1 path" : n + " paths", noSize: "n/a",
+    quitMsg: "macsweep has stopped. You can close this tab.", err: "Something went wrong: ", busy: "Busy with another task, try again in a moment.",
+    noToken: "Open the link printed in the terminal (it carries the access token).",
+  },
+  pt: {
+    tagline: "limpeza de disco para Macs de developers", free: "livre", of: "de", used: "usado", rescan: "Analisar de novo", quit: "Sair",
+    SAFE: "SEGURO", REBUILD: "REGENERÁVEL", REVIEW: "VERIFICAR",
+    SAFE_d: "Caches que as ferramentas recriam sozinhas", REBUILD_d: "Apaga-se, mas exige reinstalar ou recompilar",
+    REVIEW_d: "Pode ter dados teus: decide caso a caso",
+    items: n => n === 1 ? "1 item" : n + " itens", selectSafe: "Seleccionar todos os seguros", inuse: "Em uso: fecha",
+    nothing: n => "Nada encontrado acima de " + n + " MB", selected: n => n === 1 ? "1 item seleccionado" : n + " itens seleccionados",
+    clear: "Desmarcar tudo", review: "Rever e apagar…", after: v => v + " livres depois da limpeza",
+    projects: "Projectos", minmb: n => "A esconder itens abaixo de " + n + " MB", log: "Registo em",
+    dry: "Modo simulação: podes percorrer tudo, nada será apagado.",
+    cTitle: n => n === 1 ? "Apagar 1 item?" : "Apagar " + n + " itens?",
+    cSub: "Não dá para desfazer. Os itens VERIFICAR podem ter dados teus.", total: "Total",
+    cHint: w => "Escreve " + w + " para confirmar", word: "APAGAR", cancel: "Cancelar", del: "Apagar",
+    pTitle: "A apagar", pTitleDry: "Simulação", pSub: "O que precisar de password pede-a numa janela do macOS.",
+    done: "Concluído", freed: "libertados", dryDone: "Simulação concluída. Nada foi apagado.", close: "Fechar",
+    measuring: "A medir…", paths: n => n === 1 ? "1 caminho" : n + " caminhos", noSize: "n/d",
+    quitMsg: "O macsweep terminou. Podes fechar este separador.", err: "Algo correu mal: ", busy: "Ocupado com outra tarefa, tenta daqui a pouco.",
+    noToken: "Abre o link que aparece no terminal (leva o código de acesso).",
+  },
+};
+let L = I18N.en, S = null;
+const sel = new Set();
+const $ = id => document.getElementById(id);
+
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === "class") el.className = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (k in el && typeof v !== "string") el[k] = v;
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const c of kids.flat()) if (c != null && c !== false) el.append(c.nodeType ? c : document.createTextNode(String(c)));
+  return el;
+}
+function human(k) {
+  if (k >= 1048576) return (k / 1048576).toFixed(1) + " GB";
+  if (k >= 1024) return Math.round(k / 1024) + " MB";
+  return Math.round(k) + " KB";
+}
+function toast(msg, ms) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), ms || 4000);
+}
+async function api(path, body) {
+  const r = await fetch(path, {
+    method: body === undefined ? "GET" : "POST",
+    headers: { "X-Macsweep-Token": TOKEN, "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (r.status === 409) throw new Error(L.busy);
+  if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || "HTTP " + r.status); }
+  return r;
+}
+const byId = id => S.items[id];
+const selectable = it => !it.blocked;
+const selTotal = () => [...sel].reduce((s, id) => s + byId(id).size_k, 0);
+
+function staticText() {
+  document.documentElement.lang = S.lang;
+  $("tagline").textContent = "v" + S.version + " · " + L.tagline;
+  $("rescan").querySelector("span").textContent = L.rescan;
+  $("quit").textContent = L.quit;
+  $("clear").textContent = L.clear;
+  $("review").textContent = L.review;
+  $("dry").hidden = !S.dry_run; $("dry").textContent = L.dry;
+  $("veilText").textContent = L.measuring;
+}
+
+function renderDisk() {
+  const { total_k, free_k } = S.disk, used = total_k - free_k, picked = selTotal();
+  const pct = total_k ? used * 100 / total_k : 0;
+  $("free").textContent = human(free_k) + " " + L.free;
+  $("freeSub").textContent = L.of + " " + human(total_k) + " · " + Math.round(pct) + "% " + L.used;
+  $("after").textContent = picked ? L.after(human(free_k + picked)) : "";
+  const [u, s] = $("meter").children;
+  u.className = "used" + (pct > 90 ? " hot" : pct > 75 ? " warm" : "");
+  u.style.width = (total_k ? Math.max(0, used - picked) * 100 / total_k : 0) + "%";
+  s.style.width = (total_k ? Math.min(picked, used) * 100 / total_k : 0) + "%";
+  const meta = $("meta"); meta.replaceChildren();
+  if (S.projects) meta.append(h("span", null, L.projects + ": " + S.projects));
+  meta.append(h("span", null, L.minmb(S.min_mb)));
+}
+
+function renderCards() {
+  $("cards").replaceChildren(...TIERS.map(t => {
+    const its = S.items.filter(i => i.tier === t);
+    return h("button", { class: "card", onclick: () => document.getElementById("tier-" + t).scrollIntoView({ behavior: "smooth" }) },
+      h("span", { class: "badge t-" + t }, L[t]),
+      h("span", { class: "total num" }, human(its.reduce((s, i) => s + i.size_k, 0))),
+      h("span", { class: "desc" }, L.items(its.length) + " · " + L[t + "_d"]));
+  }));
+}
+
+function renderTiers() {
+  const max = Math.max(1, ...S.items.map(i => i.size_k));
+  $("tiers").replaceChildren(...TIERS.map(t => {
+    const its = S.items.filter(i => i.tier === t).sort((a, b) => b.size_k - a.size_k);
+    const head = h("div", { class: "tier-head" },
+      h("span", { class: "badge t-" + t }, L[t]),
+      h("span", { class: "total num" }, human(its.reduce((s, i) => s + i.size_k, 0))),
+      h("span", { class: "desc" }, L[t + "_d"]));
+    if (t === "SAFE" && its.some(selectable))
+      head.append(h("button", { class: "btn", onclick: () => { its.filter(selectable).forEach(i => sel.add(i.id)); update(); } }, L.selectSafe));
+    const list = h("div", { class: "list" });
+    if (!its.length) list.append(h("div", { class: "empty" }, L.nothing(S.min_mb)));
+    for (const it of its) {
+      const row = h("div", { class: "row" + (it.blocked ? " blocked" : ""), "data-id": it.id },
+        h("label", null,
+          h("input", { type: "checkbox", class: "check", disabled: it.blocked, "aria-label": it.label,
+            onchange: e => { e.target.checked ? sel.add(it.id) : sel.delete(it.id); update(); } }),
+          h("span", { class: "size num" + (it.size_k ? "" : " zero") }, it.size_k ? human(it.size_k) : L.noSize),
+          h("span", null,
+            h("div", { class: "label" }, it.label),
+            it.note && h("div", { class: "note" }, it.note),
+            it.block && h("div", { class: "warn" }, "⚠ " + (it.block_msg ? it.block : L.inuse + " " + it.block)))),
+        it.paths.length ? h("details", { class: "paths" }, h("summary", null, L.paths(it.paths.length)),
+          it.paths.map(p => h("code", null, p))) : null,
+        h("span", { class: "sizebar", style: "width:" + (it.size_k * 100 / max).toFixed(2) + "%" }));
+      list.append(row);
+    }
+    return h("section", { class: "tier", id: "tier-" + t }, head, list);
+  }));
+}
+
+function update() {
+  for (const row of document.querySelectorAll(".row")) {
+    const on = sel.has(+row.dataset.id);
+    row.classList.toggle("on", on);
+    row.querySelector("input").checked = on;
+  }
+  const n = sel.size;
+  $("selSize").textContent = human(selTotal());
+  $("selCount").textContent = "· " + L.selected(n);
+  $("footer").classList.toggle("show", n > 0);
+  renderDisk();
+}
+
+function render() {
+  L = I18N[S.lang] || I18N.en;
+  for (const id of [...sel]) if (!S.items[id] || S.items[id].blocked) sel.delete(id);
+  staticText(); renderCards(); renderTiers(); update();
+}
+
+function sortedSel() { return [...sel].map(byId).sort((a, b) => TIERS.indexOf(a.tier) - TIERS.indexOf(b.tier) || b.size_k - a.size_k); }
+function itemLine(it, lead) {
+  return h("div", { class: "dlg-item", "data-id": it.id }, lead, h("span", { class: "label" }, it.label),
+    h("span", { class: "size num" }, it.size_k ? human(it.size_k) : ""));
+}
+
+function openConfirm() {
+  if (!sel.size) return;
+  const its = sortedSel();
+  $("cTitle").textContent = L.cTitle(its.length);
+  $("cSub").textContent = L.cSub;
+  $("cList").replaceChildren(...its.map(it => itemLine(it, h("span", { class: "dot " + it.tier, title: L[it.tier] }))));
+  $("cTotalL").textContent = L.total; $("cTotal").textContent = human(selTotal());
+  $("cHint").textContent = L.cHint(L.word);
+  $("cCancel").textContent = L.cancel; $("cOk").textContent = L.del;
+  $("confirm").returnValue = ""; $("cWord").value = ""; $("cWord").placeholder = L.word; $("cOk").disabled = true;
+  $("confirm").showModal(); $("cWord").focus();
+}
+$("cCancel").addEventListener("click", () => $("confirm").close("cancel"));
+$("cWord").addEventListener("input", e => { $("cOk").disabled = e.target.value.trim() !== L.word; });
+$("confirm").addEventListener("close", () => { if ($("confirm").returnValue === "ok" && $("cWord").value.trim() === L.word) runDelete(); });
+
+const ICON_OK = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg>';
+async function runDelete() {
+  const its = sortedSel(), ids = its.map(i => i.id), st = {};
+  $("pTitle").textContent = S.dry_run ? L.pTitleDry : L.pTitle;
+  $("pSub").textContent = L.pSub; $("pSub").hidden = false;
+  $("pList").hidden = false; $("pResult").hidden = true;
+  $("pList").replaceChildren(...its.map(it => { const s = h("span", { class: "st" }, "○"); st[it.id] = s; return itemLine(it, s); }));
+  $("pClose").textContent = L.close; $("pClose").disabled = true;
+  $("progress").showModal();
+  let fin = null;
+  try {
+    const r = await api("/api/delete", { ids, confirm: L.word });
+    const reader = r.body.getReader(), dec = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let nl;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const ev = JSON.parse(buf.slice(0, nl)); buf = buf.slice(nl + 1);
+        const s = st[ev.id];
+        if (ev.event === "start" && s) { s.replaceChildren(h("span", { class: "spin" })); s.parentElement.scrollIntoView({ block: "nearest" }); }
+        if (ev.event === "done" && s) { s.className = "st done"; s.innerHTML = ICON_OK; }
+        if (ev.event === "finished") fin = ev;
+      }
+    }
+    if (!fin) throw new Error("interrupted");
+    sel.clear();
+    S.disk.free_k = fin.free_k;
+    const res = $("pResult"); res.hidden = false; $("pSub").hidden = true; $("pList").hidden = true;
+    res.replaceChildren(fin.dry_run
+      ? h("div", null, L.dryDone)
+      : h("div", null, h("div", { class: "big num" }, human(Math.max(0, fin.freed_k)) + " " + L.freed),
+          h("div", { class: "disk-sub num" }, human(fin.free_k) + " " + L.free + " " + L.of + " " + human(S.disk.total_k)),
+          h("div", { class: "log" }, L.log + " " + S.log)));
+    $("pTitle").textContent = L.done;
+  } catch (e) {
+    toast(L.err + e.message, 7000);
+  }
+  $("pClose").disabled = false; $("pClose").focus();
+}
+$("pClose").addEventListener("click", () => { $("progress").close(); rescan(); });
+$("progress").addEventListener("cancel", e => { if ($("pClose").disabled) e.preventDefault(); });
+
+async function rescan() {
+  $("veil").classList.add("show");
+  try { S = await (await api("/api/scan", {})).json(); render(); }
+  catch (e) { toast(L.err + e.message, 7000); }
+  $("veil").classList.remove("show");
+}
+
+$("rescan").addEventListener("click", rescan);
+$("clear").addEventListener("click", () => { sel.clear(); update(); });
+$("review").addEventListener("click", openConfirm);
+$("quit").addEventListener("click", async () => {
+  try { await api("/api/quit", {}); } catch (e) { /* already gone */ }
+  document.body.replaceChildren(h("div", { class: "wrap", style: "padding:80px 20px;text-align:center;color:var(--muted)" }, L.quitMsg));
+});
+
+(async () => {
+  if (!TOKEN) { document.body.replaceChildren(h("div", { class: "wrap", style: "padding:80px 20px;text-align:center" }, I18N.en.noToken + " / " + I18N.pt.noToken)); return; }
+  try { S = await (await api("/api/state")).json(); render(); }
+  catch (e) { document.body.replaceChildren(h("div", { class: "wrap", style: "padding:80px 20px;text-align:center" }, L.err + e.message)); }
+})();
+</script>
+</body>
+</html>
+HTML
+}
+
 # ── main ──────────────────────────────────────────────────────────────────────
-if [ "$MODE" = "help" ]; then sed -n '2,15p' "$0" | sed 's/^#  \{0,1\}//'; exit 0; fi
+if [ "$MODE" = "help" ]; then sed -n '2,16p' "$0" | sed 's/^#  \{0,1\}//; s/^#$//'; exit 0; fi
 if [ -z "$PROJECTS_DIR" ]; then
   for cand in "$HOME/Documents/local" "$HOME/Projects" "$HOME/projects" "$HOME/code" "$HOME/dev" "$HOME/src" "$HOME/Developer"; do
     [ -d "$cand" ] && { PROJECTS_DIR="$cand"; break; }
   done
 fi
+case "$MODE" in
+  __scan) scan; ui_dump "$UI_DIR/scan.dat"; exit 0 ;;
+  __exec) UI_EXEC=1; ui_load "$UI_DIR/scan.dat" || exit 1; ui_exec "$EXEC_IDS"; exit 0 ;;
+  ui)     ui_main; exit $? ;;
+esac
 if [ "$MODE" = "clean" ] && [ ! -t 0 ] && [ ! -r /dev/tty ]; then echo "$(t no_tty)"; MODE="scan"; fi
 
 banner
