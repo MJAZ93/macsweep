@@ -6,8 +6,7 @@ cd "$(dirname "$0")/.."
 python3 scripts/demo-scan.py build/demo.dat
 shot() {
   local mode="$1"
-  if [ "$mode" = dark ]; then defaults write -g AppleInterfaceStyle Dark; else defaults delete -g AppleInterfaceStyle 2>/dev/null || true; fi
-  MACSWEEP_DEMO_DUMP="$PWD/build/demo.dat" MACSWEEP_DEMO_SELECT=1 build/MacSweep.app/Contents/MacOS/MacSweep &
+  MACSWEEP_DEMO_APPEARANCE="$mode" MACSWEEP_DEMO_DUMP="$PWD/build/demo.dat" MACSWEEP_DEMO_SELECT=1 build/MacSweep.app/Contents/MacOS/MacSweep &
   local pid=$! id=""
   for _ in $(seq 1 30); do sleep 1; id=$(swift scripts/window-id.swift MacSweep 2>/dev/null) && break; done
   sleep 3
@@ -16,5 +15,4 @@ shot() {
 }
 shot light
 shot dark
-defaults delete -g AppleInterfaceStyle 2>/dev/null || true
 ls -la build/screenshot-*.png

@@ -30,6 +30,9 @@ struct MacSweepApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)  // also when started as a bare binary (swift run)
+        if ProcessInfo.processInfo.environment["MACSWEEP_DEMO_APPEARANCE"] == "dark" {  // screenshots
+            NSApp.appearance = NSAppearance(named: .darkAqua)
+        }
         NSApp.activate(ignoringOtherApps: true)
     }
 
