@@ -1,0 +1,480 @@
+#!/usr/bin/env bash
+# ──────────────────────────────────────────────────────────────────────────────
+#  macsweep — interactive disk cleaner for developer Macs
+#
+#  Finds the caches, build artifacts, simulators, emulators and worktrees that
+#  quietly eat your disk, tells you how risky each one is, and asks before it
+#  deletes anything.
+#
+#  Usage:   macsweep              scan only (never deletes)
+#           macsweep clean        interactive: asks yes/no per item
+#           macsweep clean --yes  auto-select every SAFE item (still confirms)
+#           macsweep --help
+#
+#  Works on bash 3.2 (the one that ships with macOS). No dependencies.
+#  https://github.com/MJAZ93/macsweep
+# ──────────────────────────────────────────────────────────────────────────────
+set -u
+VERSION="1.0.0"
+
+# ── options ───────────────────────────────────────────────────────────────────
+MODE="scan"
+PROJECTS_DIR=""
+INACTIVE_DAYS=30
+AUTO_YES=0
+DRY_RUN=0
+FAST=0
+LANG_UI=""
+MIN_MB=50               # hide items smaller than this
+LOG_FILE="$HOME/Library/Logs/macsweep.log"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    scan)            MODE="scan" ;;
+    clean)           MODE="clean" ;;
+    --projects)      PROJECTS_DIR="$2"; shift ;;
+    --days)          INACTIVE_DAYS="$2"; shift ;;
+    --yes|-y)        AUTO_YES=1 ;;
+    --dry-run)       DRY_RUN=1 ;;
+    --fast)          FAST=1 ;;
+    --lang)          LANG_UI="$2"; shift ;;
+    --min-mb)        MIN_MB="$2"; shift ;;
+    --no-color)      NO_COLOR=1 ;;
+    -v|--version)    echo "macsweep $VERSION"; exit 0 ;;
+    -h|--help)       MODE="help" ;;
+    *) echo "unknown option: $1" >&2; exit 2 ;;
+  esac
+  shift
+done
+
+if [ "$(id -u)" = "0" ]; then echo "Do not run macsweep as root." >&2; exit 1; fi
+
+# ── language ──────────────────────────────────────────────────────────────────
+if [ -z "$LANG_UI" ]; then
+  case "${LC_ALL:-${LANG:-en}}" in pt*) LANG_UI=pt ;; *) LANG_UI=en ;; esac
+fi
+t() {
+  if [ "$LANG_UI" = "pt" ]; then
+    case "$1" in
+      tagline)   echo "limpeza de disco para Macs de developers" ;;
+      scanning)  echo "A medir" ;;
+      free)      echo "livre" ;;
+      of)        echo "de" ;;
+      used)      echo "usado" ;;
+      safe)      echo "SEGURO" ;;
+      rebuild)   echo "REGENERÁVEL" ;;
+      review)    echo "VERIFICAR" ;;
+      safe_d)    echo "caches que as ferramentas recriam sozinhas" ;;
+      rebuild_d) echo "apaga-se, mas exige reinstalar ou recompilar" ;;
+      review_d)  echo "pode ter dados teus: decide caso a caso" ;;
+      total)     echo "Total" ;;
+      inuse)     echo "em uso, fecha" ;;
+      nothing)   echo "Nada encontrado acima de" ;;
+      q_delete)  echo "Apagar?" ;;
+      keys)      echo "[s]im  [n]ão  [t]odos os seguros  [r]esto não  [q]sair" ;;
+      selected)  echo "Seleccionado" ;;
+      none_sel)  echo "Nada seleccionado. Nada foi apagado." ;;
+      confirm)   echo "Escreve APAGAR para confirmar (ou Enter para cancelar):" ;;
+      confirm_w) echo "APAGAR" ;;
+      cancelled) echo "Cancelado. Nada foi apagado." ;;
+      deleting)  echo "A apagar" ;;
+      done)      echo "Concluído" ;;
+      freed)     echo "libertados" ;;
+      dry)       echo "MODO SIMULAÇÃO: nada será apagado" ;;
+      scan_only) echo "Modo análise: nada foi apagado. Corre 'macsweep clean' para limpar." ;;
+      projects)  echo "Projectos" ;;
+      inactive)  echo "inactivo há" ;;
+      days)      echo "dias" ;;
+      sudo_note) echo "pede password (sudo)" ;;
+      hint_all)  echo "'t' selecciona todos os SEGUROS de uma vez; os VERIFICAR são sempre um a um." ;;
+      log)       echo "Registo em" ;;
+      no_tty)    echo "Sem terminal interactivo; a correr só análise." ;;
+    esac
+  else
+    case "$1" in
+      tagline)   echo "disk cleanup for developer Macs" ;;
+      scanning)  echo "Measuring" ;;
+      free)      echo "free" ;;
+      of)        echo "of" ;;
+      used)      echo "used" ;;
+      safe)      echo "SAFE" ;;
+      rebuild)   echo "REBUILD" ;;
+      review)    echo "REVIEW" ;;
+      safe_d)    echo "caches that tools recreate on their own" ;;
+      rebuild_d) echo "deletable, but you will reinstall or rebuild" ;;
+      review_d)  echo "may hold your data: decide one by one" ;;
+      total)     echo "Total" ;;
+      inuse)     echo "in use, close" ;;
+      nothing)   echo "Nothing found above" ;;
+      q_delete)  echo "Delete?" ;;
+      keys)      echo "[y]es  [n]o  [a]ll safe  [r]est no  [q]uit" ;;
+      selected)  echo "Selected" ;;
+      none_sel)  echo "Nothing selected. Nothing was deleted." ;;
+      confirm)   echo "Type DELETE to confirm (or Enter to cancel):" ;;
+      confirm_w) echo "DELETE" ;;
+      cancelled) echo "Cancelled. Nothing was deleted." ;;
+      deleting)  echo "Deleting" ;;
+      done)      echo "Done" ;;
+      freed)     echo "freed" ;;
+      dry)       echo "DRY RUN: nothing will be deleted" ;;
+      scan_only) echo "Scan mode: nothing was deleted. Run 'macsweep clean' to clean up." ;;
+      projects)  echo "Projects" ;;
+      inactive)  echo "inactive for" ;;
+      days)      echo "days" ;;
+      sudo_note) echo "asks for password (sudo)" ;;
+      hint_all)  echo "'a' selects every SAFE item at once; REVIEW items are always one by one." ;;
+      log)       echo "Log at" ;;
+      no_tty)    echo "No interactive terminal; running scan only." ;;
+    esac
+  fi
+}
+YES_KEY="y"; ALL_KEY="a"; [ "$LANG_UI" = "pt" ] && { YES_KEY="s"; ALL_KEY="t"; }
+
+# ── colours ───────────────────────────────────────────────────────────────────
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+  B=$'\033[1m'; D=$'\033[2m'; R=$'\033[0m'
+  GRN=$'\033[32m'; YEL=$'\033[33m'; RED=$'\033[31m'; CYN=$'\033[36m'; MAG=$'\033[35m'; WHT=$'\033[97m'
+  BG_GRN=$'\033[42;30m'; BG_YEL=$'\033[43;30m'; BG_RED=$'\033[41;97m'; BG_BLU=$'\033[44;97m'
+else
+  B=""; D=""; R=""; GRN=""; YEL=""; RED=""; CYN=""; MAG=""; WHT=""; BG_GRN=""; BG_YEL=""; BG_RED=""; BG_BLU=""
+fi
+COLS=$(tput cols 2>/dev/null || echo 80); [ "$COLS" -gt 100 ] && COLS=100
+
+# ── ui helpers ────────────────────────────────────────────────────────────────
+line()   { printf '%s' "$D"; printf '─%.0s' $(seq 1 "$COLS"); printf '%s\n' "$R"; }
+hdr()    { echo; printf '%s%s %s %s\n' "$B" "$CYN" "$1" "$R"; line; }
+human()  { awk -v k="${1:-0}" 'BEGIN{ if (k>=1048576) printf "%5.1f GB", k/1048576; else if (k>=1024) printf "%5.0f MB", k/1024; else printf "%5.0f KB", k }'; }
+badge()  { case "$1" in
+             SAFE)    printf '%s %-11s %s' "$BG_GRN" "$(t safe)" "$R" ;;
+             REBUILD) printf '%s %-11s %s' "$BG_YEL" "$(t rebuild)" "$R" ;;
+             REVIEW)  printf '%s %-11s %s' "$BG_RED" "$(t review)" "$R" ;;
+           esac; }
+spin_pid=""
+spin_start() { [ -t 1 ] || return 0
+  ( i=0; f='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    while :; do printf '\r%s%s%s %s %s…  ' "$CYN" "${f:$((i%10)):1}" "$R" "$(t scanning)" "$1"; i=$((i+1)); sleep 0.08; done ) &
+  spin_pid=$!; }
+spin_stop()  { [ -n "$spin_pid" ] && { kill "$spin_pid" 2>/dev/null; wait "$spin_pid" 2>/dev/null; spin_pid=""; printf '\r%*s\r' "$COLS" ""; }; }
+trap 'spin_stop; echo; exit 130' INT TERM
+
+banner() {
+  echo
+  printf '%s%s' "$B" "$MAG"
+  cat <<'EOF'
+   ███╗   ███╗ █████╗  ██████╗███████╗██╗    ██╗███████╗███████╗██████╗
+   ████╗ ████║██╔══██╗██╔════╝██╔════╝██║    ██║██╔════╝██╔════╝██╔══██╗
+   ██╔████╔██║███████║██║     ███████╗██║ █╗ ██║█████╗  █████╗  ██████╔╝
+   ██║╚██╔╝██║██╔══██║██║     ╚════██║██║███╗██║██╔══╝  ██╔══╝  ██╔═══╝
+   ██║ ╚═╝ ██║██║  ██║╚██████╗███████║╚███╔███╔╝███████╗███████╗██║
+   ╚═╝     ╚═╝╚═╝  ╚═╝ ╚═════╝╚══════╝ ╚══╝╚══╝ ╚══════╝╚══════╝╚═╝
+EOF
+  printf '%s   %sv%s · %s%s\n\n' "$R" "$D" "$VERSION" "$(t tagline)" "$R"
+}
+
+disk_free_k() { df -k / | awk 'NR==2{print $4}'; }
+disk_line() {
+  df -k / | awk -v f="$(t free)" -v o="$(t of)" -v u="$(t used)" -v B="$B" -v R="$R" -v G="$GRN" -v Y="$YEL" -v Rd="$RED" 'NR==2{
+    tot=$2/1048576; avail=$4/1048576; pct=100-($4*100/$2);
+    col=(pct>90)?Rd:(pct>75)?Y:G;
+    bar=""; n=int(pct/2.5); for(i=0;i<40;i++) bar=bar ((i<n)?"█":"░");
+    printf "  %s%s%s%s  %s%5.1f GB%s %s %s%.0f GB%s  (%.0f%% %s)\n", B, col, bar, R, B, avail, R, f, B, tot, R, pct, u }'
+}
+
+# ── running apps ──────────────────────────────────────────────────────────────
+running() { pgrep -f "$1" >/dev/null 2>&1; }
+XCODE_UP=0; running "Xcode.app/Contents/MacOS/Xcode" && XCODE_UP=1
+SIM_UP=0;   running "Simulator.app/Contents/MacOS/Simulator" && SIM_UP=1
+AS_UP=0;    running "Android Studio.app/Contents/MacOS" && AS_UP=1
+EMU_UP=0;   running "qemu-system" && EMU_UP=1
+GRADLE_UP=0; running "GradleDaemon|KotlinCompileDaemon" && GRADLE_UP=1
+JB_UP=0;    running "GoLand|WebStorm|RustRover|DataGrip|PyCharm|IntelliJ|CLion|PhpStorm|Rider|RubyMine" && JB_UP=1
+CHROME_UP=0; pgrep -x "Google Chrome" >/dev/null 2>&1 && CHROME_UP=1
+DOCKER_UP=0; docker info >/dev/null 2>&1 && DOCKER_UP=1
+
+# ── item catalog (parallel arrays: bash 3.2 has no associative arrays) ────────
+N=0
+I_TIER=(); I_LABEL=(); I_PATHS=(); I_NOTE=(); I_SIZE=(); I_HANDLER=(); I_BLOCK=(); I_SEL=()
+# add TIER "label" "note" "blocker-or-empty" "handler-or-rm" path...
+add() {
+  local tier="$1" label="$2" note="$3" block="$4" handler="$5"; shift 5
+  local paths="" p k=0 exists=0
+  for p in "$@"; do
+    [ -e "$p" ] || continue
+    exists=1; paths="${paths}${p}"$'\n'
+  done
+  [ "$exists" -eq 0 ] && return 0
+  k=$(printf '%s' "$paths" | tr '\n' '\0' | xargs -0 du -skc 2>/dev/null | tail -1 | cut -f1)
+  k=${k:-0}
+  [ "$k" -lt $((MIN_MB*1024)) ] && return 0
+  I_TIER[$N]="$tier"; I_LABEL[$N]="$label"; I_PATHS[$N]="$paths"; I_NOTE[$N]="$note"
+  I_SIZE[$N]="$k"; I_HANDLER[$N]="$handler"; I_BLOCK[$N]="$block"; I_SEL[$N]=0
+  N=$((N+1))
+}
+
+# ── custom handlers (called at delete time) ───────────────────────────────────
+h_rm()             { printf '%s' "$1" | tr '\n' '\0' | xargs -0 rm -rf; }
+h_brew()           { brew cleanup --prune=all >/dev/null 2>&1; h_rm "$1"; }
+h_sim_unavail()    { xcrun simctl delete unavailable >/dev/null 2>&1; }
+h_sim_runtime()    { xcrun simctl shutdown all >/dev/null 2>&1; xcrun simctl runtime delete "$2" >/dev/null 2>&1; sleep 3; xcrun simctl delete unavailable >/dev/null 2>&1; }
+h_sudo_rm()        { echo; echo "  $(t sudo_note)"; printf '%s' "$1" | tr '\n' '\0' | sudo xargs -0 rm -rf 2>/dev/null; true; }
+h_docker_prune()   { docker system prune -a -f >/dev/null 2>&1; }
+h_worktree()       { local d repo; d=$(printf '%s' "$1" | head -1); repo="$2"
+                     git -C "$repo" worktree remove --force "$d" >/dev/null 2>&1 || rm -rf "$d"; git -C "$repo" worktree prune >/dev/null 2>&1; }
+h_trash()          { osascript -e 'tell application "Finder" to empty trash' >/dev/null 2>&1; }
+
+# ── scan ──────────────────────────────────────────────────────────────────────
+scan() {
+  local L="$HOME/Library" C="$HOME/Library/Caches" blk
+  spin_start "Xcode"
+  # Xcode DeviceSupport: keep newest of each device model
+  local ds="$L/Developer/Xcode/iOS DeviceSupport"
+  if [ -d "$ds" ]; then
+    local old=() d
+    while IFS= read -r d; do old[${#old[@]}]="$ds/$d"; done < <(
+      ls "$ds" 2>/dev/null | awk '{ split($2,v,"."); printf "%s\t%05d.%05d.%05d\t%s\n", $1, v[1], v[2], v[3], $0 }' \
+        | sort -t$'\t' -k1,1 -k2,2 | awk -F'\t' '{ if (prev==$1) print last; prev=$1; last=$3 }')
+    [ ${#old[@]} -gt 0 ] && add SAFE "Xcode iOS DeviceSupport (old versions)" "symbols for iOS versions your iPhone no longer runs; newest kept" "" rm "${old[@]}"
+  fi
+  blk=""; [ $XCODE_UP -eq 1 ] && blk="Xcode"
+  add SAFE "Xcode DerivedData" "intermediate builds; next build is slower once" "$blk" rm "$L/Developer/Xcode/DerivedData"
+  add SAFE "Xcode Archives" "exported .xcarchive bundles (keep if you need to re-symbolicate old releases)" "" rm "$L/Developer/Xcode/Archives"
+  add SAFE "CoreSimulator caches (user)" "" "" rm "$L/Developer/CoreSimulator/Caches"
+  add SAFE "CoreSimulator dyld cache (system)" "$(t sudo_note); entries of the active runtime are protected and are skipped" "" sudo_rm "/Library/Developer/CoreSimulator/Caches/dyld"
+  add SAFE "Swift Package Manager cache" "" "" rm "$C/org.swift.swiftpm"
+  add SAFE "CocoaPods cache" "" "" rm "$C/CocoaPods"
+  # unavailable simulators
+  local unav; unav=$(xcrun simctl list devices unavailable 2>/dev/null | grep -c unavailable); unav=${unav:-0}
+  if [ "${unav:-0}" -gt 0 ]; then
+    I_TIER[$N]="SAFE"; I_LABEL[$N]="Unavailable simulators ($unav)"; I_PATHS[$N]=""; I_NOTE[$N]="devices whose runtime is gone"; I_SIZE[$N]=0; I_HANDLER[$N]="sim_unavail"; I_BLOCK[$N]=""; I_SEL[$N]=0; N=$((N+1))
+  fi
+  # simulator runtimes (REVIEW, one per runtime)
+  blk=""; [ $SIM_UP -eq 1 ] && blk="Simulator"
+  while IFS= read -r rl; do
+    [ -n "$rl" ] || continue
+    local rname rbuild rid vol
+    rname=$(echo "$rl" | sed -E 's/ \(.*//'); rbuild=$(echo "$rl" | sed -E 's/^[^(]*\(([^)]+)\).*/\1/'); rid=$(echo "$rl" | sed -E 's/.* - ([A-F0-9-]+) .*/\1/')
+    vol="/Library/Developer/CoreSimulator/Volumes/$(echo "$rname" | cut -d' ' -f1)_$rbuild"
+    [ -d "$vol" ] || continue
+    add REVIEW "Simulator runtime $rname" "all simulators on this runtime become unusable; re-download in Xcode > Settings > Components" "$blk" "sim_runtime $rid" "$vol"
+  done < <(xcrun simctl runtime list 2>/dev/null | grep -E "^(iOS|watchOS|tvOS|visionOS) " )
+  spin_stop
+
+  spin_start "Android"
+  blk=""; [ $EMU_UP -eq 1 ] && blk="Emulator"
+  for d in "$HOME"/.android/avd/*.avd; do
+    [ -d "$d" ] || continue
+    local an; an=$(basename "$d" .avd)
+    add SAFE "AVD $an: snapshots" "quick-boot state only; the emulator cold-boots once" "$blk" rm "$d/snapshots"
+    add REVIEW "AVD $an: wipe data" "factory reset: removes installed apps and data, keeps the device" "$blk" rm \
+        "$d/userdata-qemu.img" "$d/userdata-qemu.img.qcow2" "$d/cache.img" "$d/cache.img.qcow2" "$d/sdcard.img.qcow2" \
+        "$d/encryptionkey.img" "$d/encryptionkey.img.qcow2" "$d/tmpAdbCmds"
+  done
+  local SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}}"
+  if [ -d "$SDK/ndk" ]; then
+    local nd
+    for nd in "$SDK"/ndk/*/; do [ -d "$nd" ] && add REVIEW "Android NDK $(basename "$nd")" "only needed for native (C/C++) builds; re-download in SDK Manager" "" rm "$nd"; done
+  fi
+  if [ -d "$SDK/system-images" ]; then
+    local si
+    for si in "$SDK"/system-images/*/*/*/; do [ -d "$si" ] && add REVIEW "Android system image $(echo "$si" | awk -F/ '{print $(NF-3)"/"$(NF-2)"/"$(NF-1)}')" "needed by AVDs of that API level; re-download in SDK Manager" "" rm "$si"; done
+  fi
+  blk=""; [ $AS_UP -eq 1 ] && blk="Android Studio"; [ $GRADLE_UP -eq 1 ] && blk="Gradle daemon"
+  add SAFE "Gradle caches" "dependencies and build cache; re-downloaded on next build" "$blk" rm "$HOME/.gradle/caches" "$HOME/.gradle/daemon"
+  add SAFE "Gradle distributions" "downloaded Gradle versions" "$blk" rm "$HOME/.gradle/wrapper/dists"
+  add SAFE "Android Studio caches + logs" "" "$blk" rm "$C"/Google/AndroidStudio* "$L"/Logs/Google/AndroidStudio*
+  add SAFE "Android emulator cache" "" "" rm "$HOME/.android/cache"
+  spin_stop
+
+  spin_start "IDEs & tools"
+  blk=""; [ $JB_UP -eq 1 ] && blk="JetBrains IDE"
+  add SAFE "JetBrains caches + logs" "indexes and logs for every JetBrains IDE; rebuilt on next open" "$blk" rm "$C/JetBrains" "$L/Logs/JetBrains"
+  add SAFE "npm cache" "" "" rm "$HOME/.npm/_cacache" "$HOME/.npm/_logs" "$HOME/.npm/_npx"
+  add SAFE "pnpm store + cache" "" "" rm "$L/pnpm/store" "$C/pnpm"
+  add SAFE "Yarn cache" "" "" rm "$C/Yarn" "$HOME/.yarn/berry/cache"
+  add SAFE "Bun cache" "" "" rm "$HOME/.bun/install/cache"
+  add SAFE "Go build cache" "" "" rm "$C/go-build"
+  add REBUILD "Go module cache (~/go/pkg/mod)" "re-downloaded with 'go mod download'" "" rm "$HOME/go/pkg/mod"
+  add SAFE "pip / uv caches" "" "" rm "$C/pip" "$HOME/.cache/uv" "$HOME/.cache/pip"
+  add SAFE "Cargo registry cache" "" "" rm "$HOME/.cargo/registry/cache" "$HOME/.cargo/registry/src"
+  add SAFE "Maven repository (~/.m2)" "" "" rm "$HOME/.m2/repository"
+  add SAFE "Dart / Flutter pub cache" "" "" rm "$HOME/.pub-cache"
+  add SAFE "Puppeteer / Playwright browsers" "" "" rm "$HOME/.cache/puppeteer" "$C/ms-playwright" "$C/ms-playwright-go"
+  add SAFE "Homebrew cache + old versions" "runs 'brew cleanup --prune=all'" "" brew "$C/Homebrew"
+  add SAFE "Zig / node-gyp / Apple python caches" "" "" rm "$HOME/.cache/zig" "$C/node-gyp" "$C/com.apple.python"
+  add SAFE "Codex cache" "" "" rm "$C/com.openai.codex"
+  add SAFE "Claude Desktop caches" "" "" rm "$L/Application Support/Claude/Cache" "$L/Application Support/Claude/Code Cache"
+  blk=""; [ $CHROME_UP -eq 1 ] && blk="Chrome"
+  add SAFE "Chrome cache" "" "$blk" rm "$C/Google/Chrome" "$C/Google/Chrome-headless"
+  add SAFE "App updaters (ShipIt / Squirrel leftovers)" "staged updates for Electron apps" "" rm "$C"/*.ShipIt/update.* "$C"/*-updater
+  add SAFE "Dynamic wallpaper cache" "" "" rm "$L/Application Support/com.apple.wallpaper/aerials"
+  spin_stop
+
+  spin_start "Docker"
+  local dvm="$L/Containers/com.docker.docker/Data/vms"
+  if [ -d "$dvm" ]; then
+    if [ $DOCKER_UP -eq 1 ]; then
+      add REVIEW "Docker: prune unused images, containers, build cache" "runs 'docker system prune -a' (volumes are kept). VM file shrinks only if 'Disk image size' is reduced in Docker Desktop" "" docker_prune "$dvm"
+    else
+      I_TIER[$N]="REVIEW"; I_LABEL[$N]="Docker VM"; I_PATHS[$N]=""; I_NOTE[$N]="images, containers and build cache live inside this file"; I_SIZE[$N]=$(du -sk "$dvm" 2>/dev/null | cut -f1); I_HANDLER[$N]="none"; I_BLOCK[$N]="!Docker Desktop is not running: start it and rerun to prune"; I_SEL[$N]=0; N=$((N+1))
+    fi
+  fi
+  spin_stop
+
+  if [ $FAST -eq 0 ] && [ -n "$PROJECTS_DIR" ] && [ -d "$PROJECTS_DIR" ]; then
+    spin_start "$(t projects)"
+    local p last now age arts
+    now=$(date +%s)
+    for p in "$PROJECTS_DIR"/*/; do
+      p=${p%/}; [ -d "$p" ] || continue
+      # last real activity: newest file outside artifacts/noise
+      last=$(find "$p" -type f -not -path "*/node_modules/*" -not -path "*/.git/*" -not -path "*/build/*" -not -path "*/.gradle/*" \
+             -not -path "*/Pods/*" -not -path "*/.venv/*" -not -path "*/dist/*" -not -path "*/.claude/*" -not -path "*/.idea/*" \
+             -not -name .DS_Store -not -name "*.lock" -exec stat -f '%m' {} + 2>/dev/null | sort -n | tail -1)
+      [ -n "$last" ] || continue
+      age=$(( (now - last) / 86400 ))
+      arts=()
+      while IFS= read -r d; do arts[${#arts[@]}]="$d"; done < <(find "$p" \( -name node_modules -o -name build -o -name Pods -o -name .venv -o -name venv -o -name .gradle -o -name .build -o -name target -o -name .dart_tool -o -name .next \) -type d -prune 2>/dev/null)
+      [ ${#arts[@]} -gt 0 ] || continue
+      if [ "$age" -ge "$INACTIVE_DAYS" ]; then
+        add REBUILD "$(basename "$p"): build artifacts ($(t inactive) $age $(t days))" "node_modules, build, Pods, .venv… reinstall when you return" "" rm "${arts[@]}"
+      fi
+      # Claude Code / git worktrees
+      if [ -d "$p/.claude/worktrees" ]; then
+        local w
+        for w in "$p"/.claude/worktrees/*/; do
+          w=${w%/}; [ -d "$w" ] || continue
+          local dirty; dirty=$(git -C "$w" status --porcelain 2>/dev/null | head -1)
+          [ -n "$dirty" ] && continue   # never offer a worktree with uncommitted changes
+          add REVIEW "$(basename "$p"): worktree $(basename "$w")" "clean worktree; its branch stays in the repo" "" "worktree $p" "$w"
+        done
+      fi
+    done
+    spin_stop
+  fi
+
+  local tk; tk=$(du -sk "$HOME/.Trash" 2>/dev/null | cut -f1); tk=${tk:-0}
+  if [ "$tk" -ge $((MIN_MB*1024)) ]; then
+    I_TIER[$N]="REVIEW"; I_LABEL[$N]="Empty Trash"; I_PATHS[$N]=""; I_NOTE[$N]="via Finder"; I_SIZE[$N]=$tk; I_HANDLER[$N]="trash"; I_BLOCK[$N]=""; I_SEL[$N]=0; N=$((N+1))
+  fi
+}
+
+# ── report ────────────────────────────────────────────────────────────────────
+sorted_idx() { # prints indexes of a tier, largest first
+  local i; for ((i=0;i<N;i++)); do [ "${I_TIER[$i]}" = "$1" ] && printf '%s\t%s\n' "${I_SIZE[$i]}" "$i"; done | sort -rn | cut -f2
+}
+tier_total() { local i s=0; for ((i=0;i<N;i++)); do [ "${I_TIER[$i]}" = "$1" ] && s=$((s + I_SIZE[i])); done; echo "$s"; }
+print_item() {
+  local i="$1" num="$2" mark="$3"
+  printf '  %s%3s%s %s %s%s%s  %s\n' "$D" "$num" "$R" "$mark" "$B" "$(human "${I_SIZE[$i]}")" "$R" "${I_LABEL[$i]}"
+  [ -n "${I_NOTE[$i]}" ] && printf '          %s%s%s\n' "$D" "${I_NOTE[$i]}" "$R"
+  if [ -n "${I_BLOCK[$i]}" ]; then
+    case "${I_BLOCK[$i]}" in
+      !*) printf '          %s⚠ %s%s\n' "$YEL" "${I_BLOCK[$i]#!}" "$R" ;;
+      *)  printf '          %s⚠ %s %s%s\n' "$YEL" "$(t inuse)" "${I_BLOCK[$i]}" "$R" ;;
+    esac
+  fi
+}
+report() {
+  local tier i n=0
+  for tier in SAFE REBUILD REVIEW; do
+    local tot; tot=$(tier_total "$tier")
+    echo; printf '  %s  %s%s%s   %s%s%s\n' "$(badge "$tier")" "$B" "$(human "$tot")" "$R" "$D" "$(t "$(echo "$tier" | tr 'A-Z' 'a-z')_d")" "$R"; line
+    local any=0
+    for i in $(sorted_idx "$tier"); do n=$((n+1)); any=1; print_item "$i" "$n" " "; done
+    [ $any -eq 0 ] && printf '  %s%s %s MB%s\n' "$D" "$(t nothing)" "$MIN_MB" "$R"
+  done
+}
+
+# ── interactive selection ─────────────────────────────────────────────────────
+ask() {  # returns 0=yes 1=no 2=all-safe 3=rest-no 4=quit
+  local k
+  while :; do
+    printf '      %s%s%s %s%s%s ' "$B" "$(t q_delete)" "$R" "$D" "$(t keys)" "$R"
+    read -r -n1 k </dev/tty; echo
+    case "$k" in
+      "$YES_KEY"|Y|y|s|S) return 0 ;; n|N|"") return 1 ;; "$ALL_KEY"|a|A|t|T) return 2 ;; r|R) return 3 ;; q|Q) return 4 ;;
+    esac
+  done
+}
+select_items() {
+  local tier i n=0 rc all_safe=0 rest_no=0
+  echo; printf '  %s%s%s\n' "$D" "$(t hint_all)" "$R"
+  for tier in SAFE REBUILD REVIEW; do
+    echo; printf '  %s\n' "$(badge "$tier")"; line
+    for i in $(sorted_idx "$tier"); do
+      n=$((n+1))
+      if [ -n "${I_BLOCK[$i]}" ] || [ "${I_HANDLER[$i]}" = "none" ]; then print_item "$i" "$n" "$D·$R"; continue; fi
+      if [ $rest_no -eq 1 ]; then print_item "$i" "$n" "$D·$R"; continue; fi
+      if [ "$tier" = "SAFE" ] && { [ $all_safe -eq 1 ] || [ $AUTO_YES -eq 1 ]; }; then I_SEL[$i]=1; print_item "$i" "$n" "$GRN✔$R"; continue; fi
+      print_item "$i" "$n" " "
+      while :; do
+        ask; rc=$?
+        [ $rc -eq 2 ] && [ "$tier" != "SAFE" ] && { printf '      %s%s%s\n' "$YEL" "$(t hint_all)" "$R"; continue; }
+        break
+      done
+      case $rc in
+        0) I_SEL[$i]=1 ;;
+        2) all_safe=1; I_SEL[$i]=1 ;;
+        3) rest_no=1 ;;
+        4) echo; echo "  $(t cancelled)"; exit 0 ;;
+      esac
+    done
+  done
+}
+
+# ── execute ───────────────────────────────────────────────────────────────────
+execute() {
+  local i sel=0 tot=0
+  hdr "$(t selected)"
+  local tier
+  for tier in SAFE REBUILD REVIEW; do for i in $(sorted_idx "$tier"); do
+    [ "${I_SEL[$i]}" = "1" ] || continue
+    sel=$((sel+1)); tot=$((tot + I_SIZE[i]))
+    printf '  %s✔%s %s %s%s%s  %s\n' "$GRN" "$R" "$(badge "$tier")" "$B" "$(human "${I_SIZE[$i]}")" "$R" "${I_LABEL[$i]}"
+  done; done
+  if [ $sel -eq 0 ]; then echo "  $(t none_sel)"; return 0; fi
+  line; printf '  %s%s: %s%s\n' "$B" "$(t total)" "$(human "$tot")" "$R"
+  [ $DRY_RUN -eq 1 ] && { echo; printf '  %s%s%s\n' "$YEL" "$(t dry)" "$R"; return 0; }
+  echo; printf '  %s ' "$(t confirm)"; local ans; read -r ans </dev/tty
+  [ "$ans" = "$(t confirm_w)" ] || { echo "  $(t cancelled)"; return 0; }
+
+  local before after; before=$(disk_free_k)
+  mkdir -p "$(dirname "$LOG_FILE")"; echo "== $(date '+%Y-%m-%d %H:%M') macsweep $VERSION" >> "$LOG_FILE"
+  hdr "$(t deleting)"
+  for ((i=0;i<N;i++)); do
+    [ "${I_SEL[$i]}" = "1" ] || continue
+    printf '  %s…%s %s' "$CYN" "$R" "${I_LABEL[$i]}"
+    local h="${I_HANDLER[$i]}" arg=""
+    case "$h" in *" "*) arg="${h#* }"; h="${h%% *}" ;; esac
+    "h_$h" "${I_PATHS[$i]}" "$arg"
+    printf '\r  %s✔%s %s\n' "$GRN" "$R" "${I_LABEL[$i]}"
+    printf '%s\t%s\n' "${I_LABEL[$i]}" "$(printf '%s' "${I_PATHS[$i]}" | tr '\n' ' ')" >> "$LOG_FILE"
+  done
+  after=$(disk_free_k)
+  echo; line
+  printf '  %s%s%s  %s%s %s%s\n' "$B" "$(t done)." "$R" "$GRN$B" "$(human $((after - before)))" "$(t freed)" "$R"
+  disk_line
+  printf '  %s%s %s%s\n' "$D" "$(t log)" "$LOG_FILE" "$R"
+}
+
+# ── main ──────────────────────────────────────────────────────────────────────
+if [ "$MODE" = "help" ]; then sed -n '2,15p' "$0" | sed 's/^#  \{0,1\}//'; exit 0; fi
+if [ -z "$PROJECTS_DIR" ]; then
+  for cand in "$HOME/Documents/local" "$HOME/Projects" "$HOME/projects" "$HOME/code" "$HOME/dev" "$HOME/src" "$HOME/Developer"; do
+    [ -d "$cand" ] && { PROJECTS_DIR="$cand"; break; }
+  done
+fi
+if [ "$MODE" = "clean" ] && [ ! -t 0 ] && [ ! -r /dev/tty ]; then echo "$(t no_tty)"; MODE="scan"; fi
+
+banner
+disk_line
+scan
+report
+echo; line
+if [ "$MODE" = "scan" ]; then
+  printf '  %s%s%s\n\n' "$D" "$(t scan_only)" "$R"
+  exit 0
+fi
+select_items
+execute
+echo

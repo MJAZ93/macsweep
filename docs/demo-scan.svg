@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="892" height="906" viewBox="0 0 892 906" font-family="SFMono-Regular,Menlo,Consolas,monospace" font-size="13">
+<rect width="892" height="906" rx="10" fill="#0f1117"/>
+<rect width="892" height="34" rx="10" fill="#1b1e28"/><rect y="20" width="892" height="14" fill="#1b1e28"/>
+<circle cx="20" cy="17" r="6" fill="#ff5f57"/><circle cx="40" cy="17" r="6" fill="#febc2e"/><circle cx="60" cy="17" r="6" fill="#28c840"/>
+<text x="446.0" y="22" fill="#8b93a7" text-anchor="middle" font-size="12">macsweep</text>
+<text x="18.0" y="71" fill="#c792ea" font-weight="bold" xml:space="preserve">   ███╗   ███╗ █████╗  ██████╗███████╗██╗    ██╗███████╗███████╗██████╗</text>
+<text x="18.0" y="90" fill="#c792ea" font-weight="bold" xml:space="preserve">   ████╗ ████║██╔══██╗██╔════╝██╔════╝██║    ██║██╔════╝██╔════╝██╔══██╗</text>
+<text x="18.0" y="109" fill="#c792ea" font-weight="bold" xml:space="preserve">   ██╔████╔██║███████║██║     ███████╗██║ █╗ ██║█████╗  █████╗  ██████╔╝</text>
+<text x="18.0" y="128" fill="#c792ea" font-weight="bold" xml:space="preserve">   ██║╚██╔╝██║██╔══██║██║     ╚════██║██║███╗██║██╔══╝  ██╔══╝  ██╔═══╝</text>
+<text x="18.0" y="147" fill="#c792ea" font-weight="bold" xml:space="preserve">   ██║ ╚═╝ ██║██║  ██║╚██████╗███████║╚███╔███╔╝███████╗███████╗██║</text>
+<text x="18.0" y="166" fill="#c792ea" font-weight="bold" xml:space="preserve">   ╚═╝     ╚═╝╚═╝  ╚═╝ ╚═════╝╚══════╝ ╚══╝╚══╝ ╚══════╝╚══════╝╚═╝</text>
+<text x="18.0" y="185" fill="#d6deeb" xml:space="preserve">   </text>
+<text x="43.2" y="185" fill="#d6deeb" opacity="0.55" xml:space="preserve">v1.0.0 · disk cleanup for developer Macs</text>
+<text x="18.0" y="223" fill="#d6deeb" xml:space="preserve">  </text>
+<text x="34.8" y="223" fill="#5be49b" font-weight="bold" xml:space="preserve">██████████████████████████░░░░░░░░░░░░░░</text>
+<text x="370.8" y="223" fill="#d6deeb" xml:space="preserve">  </text>
+<text x="387.6" y="223" fill="#d6deeb" font-weight="bold" xml:space="preserve">158.3 GB</text>
+<text x="454.8" y="223" fill="#d6deeb" xml:space="preserve"> free </text>
+<text x="505.2" y="223" fill="#d6deeb" font-weight="bold" xml:space="preserve">460 GB</text>
+<text x="555.6" y="223" fill="#d6deeb" xml:space="preserve">  (66% used)</text>
+<text x="18.0" y="261" fill="#d6deeb" xml:space="preserve">  </text>
+<rect x="34.8" y="247" width="109.2" height="19" fill="#5be49b"/>
+<text x="34.8" y="261" fill="#1f2430" xml:space="preserve"> SAFE        </text>
+<text x="144.0" y="261" fill="#d6deeb" xml:space="preserve">  </text>
+<text x="160.8" y="261" fill="#d6deeb" font-weight="bold" xml:space="preserve">  6.3 GB</text>
+<text x="228.0" y="261" fill="#d6deeb" xml:space="preserve">   </text>
+<text x="253.2" y="261" fill="#d6deeb" opacity="0.55" xml:space="preserve">caches that tools recreate on their own</text>
+<text x="18.0" y="280" fill="#d6deeb" opacity="0.55" xml:space="preserve">────────────────────────────────────────────────────────────────────────────────</text>
+<text x="18.0" y="299" fill="#d6deeb" xml:space="preserve">  </text>
+<text x="34.8" y="299" fill="#d6deeb" opacity="0.55" xml:space="preserve">  1</text>
+<text x="60.0" y="299" fill="#d6deeb" xml:space="preserve">   </text>
+<text x="85.2" y="299" fill="#d6deeb" font-weight="bold" xml:space="preserve">  3.9 GB</text>
+<text x="152.4" y="299" fill="#d6deeb" xml:space="preserve">  CoreSimulator dyld cache (system)</text>
+<text x="18.0" y="318" fill="#d6deeb" xml:space="preserve">          </text>
+<text x="102.0" y="318" fill="#d6deeb" opacity="0.55" xml:space="preserve">asks for password (sudo); entries of the active runtime are protected and are skipped</text>
+<text x="18.0" y="337" fill="#d6deeb" xml:space="preserve">  </text>
+<text x="34.8" y="337" fill="#d6deeb" opacity="0.55" xml:space="preserve">  2</text>
+<text x="60.0" y="337" fill="#d6deeb" xml:space="preserve">   </text>
+<text x="85.2" y="337" fill="#d6deeb" font-weight="bold" xml:space="preserve">  1.0 GB</text>
+<text x="152.4" y="337" fill="#d6deeb" xml:space="preserve">  Claude Desktop caches</text>
+<text x="18.0" y="356" fill="#d6deeb" xml:space="preserve">  </text>
+<text x="34.8" y="356" fill="#d6deeb" opacity="0.55" xml:space="preserve">  3</text>
+<text x="60.0" y="356" fill="#d6deeb" xml:space="preserve">   </text>
+<text x="85.2" y="356" fill="#d6deeb" font-weight="bold" xml:space="preserve">  1.0 GB</text>
+<text x="152.4" y="356" fill="#d6deeb" xml:space="preserve">  Dynamic wallpaper cache</text>
+<text x="18.0" y="375" fill="#d6deeb" xml:space="preserve">  </text>
+<text x="34.8" y="375" fill="#d6deeb" opacity="0.55" xml:space="preserve">  4</text>
+<text x="60.0" y="375" fill="#d6deeb" xml:space="preserve">   </text>
+<text x="85.2" y="375" fill="#d6deeb" font-weight="bold" xml:space="preserve">  319 MB</text>
+<text x="152.4" y="375" fill="#d6deeb" xml:space="preserve">  Cargo registry cache</text>
+<text x="18.0" y="394" fill="#d6deeb" xml:space="preserve">  </text>
+<text x="34.8" y="394" fill="#d6deeb" opacity="0.55" xml:space="preserve">  5</text>
+<text x="60.0" y="394" fill="#d6deeb" xml:space="preserve">   </text>
+<text x="85.2" y="394" fill="#d6deeb" font-weight="bold" xml:space="preserve">  122 MB</text>
+<text x="152.4" y="394" fill="#d6deeb" xml:space="preserve">  Maven repository (~/.m2)</text>
+<text x="18.0" y="432" fill="#d6deeb" xml:space="preserve">  </text>
+<rect x="34.8" y="418" width="109.2" height="19" fill="#ffd866"/>
+<text x="34.8" y="432" fill="#1f2430" xml:space="preserve"> REBUILD     </text>
+<text x="144.0" y="432" fill="#d6deeb" xml:space="preserve">  </text>
+<text x="160.8" y="432" fill="#d6deeb" font-weight="bold" xml:space="preserve">  9.1 GB</text>
+<text x="228.0" y="432" fill="#d6deeb" xml:space="preserve">   </text>
+<text x="253.2" y="432" fill="#d6deeb" opacity="0.55" xml:space="preserve">deletable, but you will reinstall or rebuild</text>
+<text x="18.0" y="451" fill="#d6deeb" opacity="0.55" xml:space="preserve">────────────────────────────────────────────────────────────────────────────────</text>
+<text x="18.0" y="470" fill="#d6deeb" xml:space="preserve">  </text>
+<text x="34.8" y="470" fill="#d6deeb" opacity="0.55" xml:space="preserve">  6</text>
+<text x="60.0" y="470" fill="#d6deeb" xml:space="preserve">   </text>
+<text x="85.2" y="470" fill="#d6deeb" font-weight="bold" xml:space="preserve">  9.1 GB</text>
+<text x="152.4" y="470" fill="#d6deeb" xml:space="preserve">  Go module cache (~/go/pkg/mod)</text>
+<text x="18.0" y="489" fill="#d6deeb" xml:space="preserve">          </text>
+<text x="102.0" y="489" fill="#d6deeb" opacity="0.55" xml:space="preserve">re-downloaded with &#x27;go mod download&#x27;</text>
+<text x="18.0" y="527" fill="#d6deeb" xml:space="preserve">  </text>
+<rect x="34.8" y="513" width="109.2" height="19" fill="#ff6b6b"/>
+<text x="34.8" y="527" fill="#ffffff" xml:space="preserve"> REVIEW      </text>
+<text x="144.0" y="527" fill="#d6deeb" xml:space="preserve">  </text>
+<text x="160.8" y="527" fill="#d6deeb" font-weight="bold" xml:space="preserve"> 50.8 GB</text>
+<text x="228.0" y="527" fill="#d6deeb" xml:space="preserve">   </text>
+<text x="253.2" y="527" fill="#d6deeb" opacity="0.55" xml:space="preserve">may hold your data: decide one by one</text>
+<text x="18.0" y="546" fill="#d6deeb" opacity="0.55" xml:space="preserve">────────────────────────────────────────────────────────────────────────────────</text>
+<text x="18.0" y="565" fill="#d6deeb" xml:space="preserve">  </text>
+<text x="34.8" y="565" fill="#d6deeb" opacity="0.55" xml:space="preserve">  7</text>
+<text x="60.0" y="565" fill="#d6deeb" xml:space="preserve">   </text>
+<text x="85.2" y="565" fill="#d6deeb" font-weight="bold" xml:space="preserve"> 25.5 GB</text>
+<text x="152.4" y="565" fill="#d6deeb" xml:space="preserve">  Docker VM</text>
+<text x="18.0" y="584" fill="#d6deeb" xml:space="preserve">          </text>
+<text x="102.0" y="584" fill="#d6deeb" opacity="0.55" xml:space="preserve">images, containers and build cache live inside this file</text>
+<text x="18.0" y="603" fill="#d6deeb" xml:space="preserve">          </text>
+<text x="102.0" y="603" fill="#ffd866" xml:space="preserve">⚠ Docker Desktop is not running: start it and rerun to prune</text>
+<text x="18.0" y="622" fill="#d6deeb" xml:space="preserve">  </text>
+<text x="34.8" y="622" fill="#d6deeb" opacity="0.55" xml:space="preserve">  8</text>
+<text x="60.0" y="622" fill="#d6deeb" xml:space="preserve">   </text>
+<text x="85.2" y="622" fill="#d6deeb" font-weight="bold" xml:space="preserve"> 15.3 GB</text>
+<text x="152.4" y="622" fill="#d6deeb" xml:space="preserve">  Simulator runtime iOS 26.0.1</text>
+<text x="18.0" y="641" fill="#d6deeb" xml:space="preserve">          </text>
+<text x="102.0" y="641" fill="#d6deeb" opacity="0.55" xml:space="preserve">all simulators on this runtime become unusable; re-download in Xcode &gt; Settings &gt; Components</text>
+<text x="18.0" y="660" fill="#d6deeb" xml:space="preserve">  </text>
+<text x="34.8" y="660" fill="#d6deeb" opacity="0.55" xml:space="preserve">  9</text>
+<text x="60.0" y="660" fill="#d6deeb" xml:space="preserve">   </text>
+<text x="85.2" y="660" fill="#d6deeb" font-weight="bold" xml:space="preserve">  3.0 GB</text>
+<text x="152.4" y="660" fill="#d6deeb" xml:space="preserve">  Android NDK 26.1.10909125</text>
+<text x="18.0" y="679" fill="#d6deeb" xml:space="preserve">          </text>
+<text x="102.0" y="679" fill="#d6deeb" opacity="0.55" xml:space="preserve">only needed for native (C/C++) builds; re-download in SDK Manager</text>
+<text x="18.0" y="698" fill="#d6deeb" xml:space="preserve">  </text>
+<text x="34.8" y="698" fill="#d6deeb" opacity="0.55" xml:space="preserve"> 10</text>
+<text x="60.0" y="698" fill="#d6deeb" xml:space="preserve">   </text>
+<text x="85.2" y="698" fill="#d6deeb" font-weight="bold" xml:space="preserve">  2.4 GB</text>
+<text x="152.4" y="698" fill="#d6deeb" xml:space="preserve">  Android system image android-35/google_apis_playstore_tablet/arm64-v8a</text>
+<text x="18.0" y="717" fill="#d6deeb" xml:space="preserve">          </text>
+<text x="102.0" y="717" fill="#d6deeb" opacity="0.55" xml:space="preserve">needed by AVDs of that API level; re-download in SDK Manager</text>
+<text x="18.0" y="736" fill="#d6deeb" xml:space="preserve">  </text>
+<text x="34.8" y="736" fill="#d6deeb" opacity="0.55" xml:space="preserve"> 11</text>
+<text x="60.0" y="736" fill="#d6deeb" xml:space="preserve">   </text>
+<text x="85.2" y="736" fill="#d6deeb" font-weight="bold" xml:space="preserve">  2.4 GB</text>
+<text x="152.4" y="736" fill="#d6deeb" xml:space="preserve">  Android NDK 27.1.12297006</text>
+<text x="18.0" y="755" fill="#d6deeb" xml:space="preserve">          </text>
+<text x="102.0" y="755" fill="#d6deeb" opacity="0.55" xml:space="preserve">only needed for native (C/C++) builds; re-download in SDK Manager</text>
+<text x="18.0" y="774" fill="#d6deeb" xml:space="preserve">  </text>
+<text x="34.8" y="774" fill="#d6deeb" opacity="0.55" xml:space="preserve"> 12</text>
+<text x="60.0" y="774" fill="#d6deeb" xml:space="preserve">   </text>
+<text x="85.2" y="774" fill="#d6deeb" font-weight="bold" xml:space="preserve">  2.3 GB</text>
+<text x="152.4" y="774" fill="#d6deeb" xml:space="preserve">  Android system image android-36/google_apis_playstore/arm64-v8a</text>
+<text x="18.0" y="793" fill="#d6deeb" xml:space="preserve">          </text>
+<text x="102.0" y="793" fill="#d6deeb" opacity="0.55" xml:space="preserve">needed by AVDs of that API level; re-download in SDK Manager</text>
+<text x="18.0" y="831" fill="#d6deeb" opacity="0.55" xml:space="preserve">────────────────────────────────────────────────────────────────────────────────</text>
+<text x="18.0" y="850" fill="#d6deeb" xml:space="preserve">  </text>
+<text x="34.8" y="850" fill="#d6deeb" opacity="0.55" xml:space="preserve">Scan mode: nothing was deleted. Run &#x27;macsweep clean&#x27; to clean up.</text>
+</svg>
