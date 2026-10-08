@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>MacSweep</string>
+	<key>CFBundleDisplayName</key>
+	<string>MacSweep</string>
+	<key>CFBundleIdentifier</key>
+	<string>io.github.mjaz93.macsweep</string>
+	<key>CFBundleExecutable</key>
+	<string>MacSweep</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>__VERSION__</string>
+	<key>CFBundleVersion</key>
+	<string>__VERSION__</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>13.0</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.utilities</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>pt</string>
+	</array>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>MacSweep asks Finder to empty the Trash when you select that item.</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>MIT © Afonso Júnior</string>
+</dict>
+</plist>

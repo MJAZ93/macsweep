@@ -9,13 +9,14 @@
 #  Usage:   macsweep              scan only (never deletes)
 #           macsweep clean        interactive: asks yes/no per item
 #           macsweep clean --yes  auto-select every SAFE item (still confirms)
+#           MacSweep.app          the same cleanup as a native Mac app (see app/)
 #           macsweep --help
 #
 #  Works on bash 3.2 (the one that ships with macOS). No dependencies.
 #  https://github.com/MJAZ93/macsweep
 # ──────────────────────────────────────────────────────────────────────────────
 set -u
-VERSION="1.0.0"
+VERSION="1.1.0"
 
 # ── options ───────────────────────────────────────────────────────────────────
 MODE="scan"
@@ -27,11 +28,14 @@ FAST=0
 LANG_UI=""
 MIN_MB=50               # hide items smaller than this
 LOG_FILE="$HOME/Library/Logs/macsweep.log"
+UI_DIR=""; EXEC_IDS=""; UI_EXEC=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
     scan)            MODE="scan" ;;
     clean)           MODE="clean" ;;
+    __scan)          MODE="__scan"; UI_DIR="$2"; shift ;;          # internal: used by MacSweep.app
+    __exec)          MODE="__exec"; UI_DIR="$2"; EXEC_IDS="$3"; shift 2 ;;
     --projects)      PROJECTS_DIR="$2"; shift ;;
     --days)          INACTIVE_DAYS="$2"; shift ;;
     --yes|-y)        AUTO_YES=1 ;;
@@ -177,7 +181,7 @@ disk_line() {
     tot=$2/1048576; avail=$4/1048576; pct=100-($4*100/$2);
     col=(pct>90)?Rd:(pct>75)?Y:G;
     bar=""; n=int(pct/2.5); for(i=0;i<40;i++) bar=bar ((i<n)?"█":"░");
-    printf "  %s%s%s%s  %s%5.1f GB%s %s %s%.0f GB%s  (%.0f%% %s)\n", B, col, bar, R, B, avail, R, f, B, tot, R, pct, u }'
+    printf "  %s%s%s%s  %s%5.1f GB%s %s %s %s%.0f GB%s  (%.0f%% %s)\n", B, col, bar, R, B, avail, R, f, o, B, tot, R, pct, u }'
 }
 
 # ── running apps ──────────────────────────────────────────────────────────────
@@ -216,11 +220,24 @@ h_rm()             { printf '%s' "$1" | tr '\n' '\0' | xargs -0 rm -rf; }
 h_brew()           { brew cleanup --prune=all >/dev/null 2>&1; h_rm "$1"; }
 h_sim_unavail()    { xcrun simctl delete unavailable >/dev/null 2>&1; }
 h_sim_runtime()    { xcrun simctl shutdown all >/dev/null 2>&1; xcrun simctl runtime delete "$2" >/dev/null 2>&1; sleep 3; xcrun simctl delete unavailable >/dev/null 2>&1; }
-h_sudo_rm()        { echo; echo "  $(t sudo_note)"; printf '%s' "$1" | tr '\n' '\0' | sudo xargs -0 rm -rf 2>/dev/null; true; }
+h_sudo_rm()        { if [ $UI_EXEC -eq 1 ]; then   # run by the app, no terminal: native macOS password dialog
+                       printf '%s' "$1" | while IFS= read -r p; do [ -n "$p" ] && osascript -e 'on run argv' \
+                         -e 'do shell script "rm -rf " & quoted form of (item 1 of argv) with administrator privileges' -e 'end run' "$p" </dev/null; done
+                       return 0; fi
+                     echo; echo "  $(t sudo_note)"; printf '%s' "$1" | tr '\n' '\0' | sudo xargs -0 rm -rf 2>/dev/null; true; }
 h_docker_prune()   { docker system prune -a -f >/dev/null 2>&1; }
 h_worktree()       { local d repo; d=$(printf '%s' "$1" | head -1); repo="$2"
                      git -C "$repo" worktree remove --force "$d" >/dev/null 2>&1 || rm -rf "$d"; git -C "$repo" worktree prune >/dev/null 2>&1; }
 h_trash()          { osascript -e 'tell application "Finder" to empty trash' >/dev/null 2>&1; }
+
+log_start()  { mkdir -p "$(dirname "$LOG_FILE")"; echo "== $(date '+%Y-%m-%d %H:%M') macsweep $VERSION${1:-}" >> "$LOG_FILE"; }
+delete_item() {  # runs the handler of item $1 and logs it
+  local i="$1" h="${I_HANDLER[$1]}" arg=""
+  case "$h" in *" "*) arg="${h#* }"; h="${h%% *}" ;; esac
+  case "$h" in rm|brew|sim_unavail|sim_runtime|sudo_rm|docker_prune|worktree|trash) ;; *) return 1 ;; esac
+  "h_$h" "${I_PATHS[$i]}" "$arg"
+  printf '%s\t%s\n' "${I_LABEL[$i]}" "$(printf '%s' "${I_PATHS[$i]}" | tr '\n' ' ')" >> "$LOG_FILE"
+}
 
 # ── scan ──────────────────────────────────────────────────────────────────────
 scan() {
@@ -439,16 +456,13 @@ execute() {
   [ "$ans" = "$(t confirm_w)" ] || { echo "  $(t cancelled)"; return 0; }
 
   local before after; before=$(disk_free_k)
-  mkdir -p "$(dirname "$LOG_FILE")"; echo "== $(date '+%Y-%m-%d %H:%M') macsweep $VERSION" >> "$LOG_FILE"
+  log_start
   hdr "$(t deleting)"
   for ((i=0;i<N;i++)); do
     [ "${I_SEL[$i]}" = "1" ] || continue
     printf '  %s…%s %s' "$CYN" "$R" "${I_LABEL[$i]}"
-    local h="${I_HANDLER[$i]}" arg=""
-    case "$h" in *" "*) arg="${h#* }"; h="${h%% *}" ;; esac
-    "h_$h" "${I_PATHS[$i]}" "$arg"
+    delete_item "$i"
     printf '\r  %s✔%s %s\n' "$GRN" "$R" "${I_LABEL[$i]}"
-    printf '%s\t%s\n' "${I_LABEL[$i]}" "$(printf '%s' "${I_PATHS[$i]}" | tr '\n' ' ')" >> "$LOG_FILE"
   done
   after=$(disk_free_k)
   echo; line
@@ -457,13 +471,59 @@ execute() {
   printf '  %s%s %s%s\n' "$D" "$(t log)" "$LOG_FILE" "$R"
 }
 
+# ── engine for the macOS app (app/) ───────────────────────────────────────────
+# MacSweep.app bundles this script and drives it through two internal modes, so
+# the catalog, the handlers and the safety rules live in one place:
+#   macsweep __scan DIR [options]   scan, write the catalog to DIR/scan.dat
+#   macsweep __exec DIR 3,7,12      delete those items, print progress lines
+ui_dump() {  # writes the catalog NUL-separated: 10 header fields, then 7 per item
+            # (format "macsweep-ui-1", parsed by app/Sources/MacSweep/Engine.swift)
+  local f="$1" i
+  {
+    printf '%s\0' "macsweep-ui-1" "$VERSION" "$LANG_UI" "$(df -k / | awk 'NR==2{print $2}')" "$(disk_free_k)" \
+                  "$PROJECTS_DIR" "$DRY_RUN" "$MIN_MB" "$LOG_FILE" "$N"
+    for ((i=0;i<N;i++)); do
+      printf '%s\0' "${I_TIER[$i]}" "${I_LABEL[$i]}" "${I_NOTE[$i]}" "${I_BLOCK[$i]}" "${I_HANDLER[$i]}" "${I_SIZE[$i]:-0}" "${I_PATHS[$i]}"
+    done
+  } > "$f.tmp" && mv "$f.tmp" "$f"
+}
+ui_load() {
+  local x i b f=()
+  while IFS= read -r -d '' x; do f[${#f[@]}]="$x"; done < "$1"
+  [ "${f[0]:-}" = "macsweep-ui-1" ] || return 1
+  N=${f[9]}
+  for ((i=0;i<N;i++)); do
+    b=$((10 + i*7))
+    I_TIER[$i]="${f[$b]}"; I_LABEL[$i]="${f[$((b+1))]}"; I_NOTE[$i]="${f[$((b+2))]}"; I_BLOCK[$i]="${f[$((b+3))]}"
+    I_HANDLER[$i]="${f[$((b+4))]}"; I_SIZE[$i]="${f[$((b+5))]}"; I_PATHS[$i]="${f[$((b+6))]}"; I_SEL[$i]=0
+  done
+}
+ui_exec() {  # $1 = comma-separated item ids; prints S<tab>id, D<tab>id, F<tab>freed_k<tab>free_k
+  local id before after
+  before=$(disk_free_k)
+  [ $DRY_RUN -eq 1 ] || log_start " (ui)"
+  for id in $(printf '%s' "$1" | tr ',' ' '); do
+    case "$id" in ''|*[!0-9]*) continue ;; esac
+    [ "$id" -lt "$N" ] || continue
+    { [ -z "${I_BLOCK[$id]}" ] && [ "${I_HANDLER[$id]}" != "none" ]; } || continue
+    printf 'S\t%s\n' "$id"
+    if [ $DRY_RUN -eq 1 ]; then sleep 0.3; else delete_item "$id" >/dev/null 2>&1; fi
+    printf 'D\t%s\n' "$id"
+  done
+  after=$(disk_free_k)
+  printf 'F\t%s\t%s\n' "$((after - before))" "$after"
+}
 # ── main ──────────────────────────────────────────────────────────────────────
-if [ "$MODE" = "help" ]; then sed -n '2,15p' "$0" | sed 's/^#  \{0,1\}//'; exit 0; fi
+if [ "$MODE" = "help" ]; then sed -n '2,16p' "$0" | sed 's/^#  \{0,1\}//; s/^#$//'; exit 0; fi
 if [ -z "$PROJECTS_DIR" ]; then
   for cand in "$HOME/Documents/local" "$HOME/Projects" "$HOME/projects" "$HOME/code" "$HOME/dev" "$HOME/src" "$HOME/Developer"; do
     [ -d "$cand" ] && { PROJECTS_DIR="$cand"; break; }
   done
 fi
+case "$MODE" in
+  __scan) scan; ui_dump "$UI_DIR/scan.dat"; exit 0 ;;
+  __exec) UI_EXEC=1; ui_load "$UI_DIR/scan.dat" || exit 1; ui_exec "$EXEC_IDS"; exit 0 ;;
+esac
 if [ "$MODE" = "clean" ] && [ ! -t 0 ] && [ ! -r /dev/tty ]; then echo "$(t no_tty)"; MODE="scan"; fi
 
 banner

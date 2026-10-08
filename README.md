@@ -13,6 +13,7 @@
 <p align="center">
   <a href="#install">Install</a> ·
   <a href="#usage">Usage</a> ·
+  <a href="#mac-app">Mac app</a> ·
   <a href="#what-it-finds">What it finds</a> ·
   <a href="#safety">Safety</a> ·
   <a href="#português">Português</a>
@@ -84,6 +85,24 @@ Every item is one keypress:
 
 At the end you get a summary with the total and have to type `DELETE` before anything happens. Then it deletes, shows how much it freed, and writes a log to `~/Library/Logs/macsweep.log`.
 
+## Mac app
+
+Prefer clicking to typing? **MacSweep.app** is a native SwiftUI app with the same catalog and the same rules: everything grouped by tier and sorted by size, a disk bar that shows how much you will have free afterwards, a list of the exact paths behind each item (with **Show in Finder**), a review sheet where you type `DELETE`, and live progress while each item goes. Items in use are greyed out, **Select All Safe** only ever touches SAFE items, and every deletion goes to the same log. The one step that needs an admin password asks for it in the normal macOS dialog. English and Portuguese, light and dark, macOS 13 or newer.
+
+The app does not reimplement anything: it ships the `macsweep` script inside the bundle and runs it, so the CLI and the app always agree on what is safe.
+
+**Install:** download `MacSweep.zip` from [Releases](https://github.com/MJAZ93/macsweep/releases), unzip, drag `MacSweep.app` to Applications. The app is not notarized, so the first time macOS will refuse to open it: right-click it and pick **Open** (on macOS 15, go to *System Settings → Privacy & Security → Open Anyway*), or run `xattr -dr com.apple.quarantine /Applications/MacSweep.app`.
+
+**Build it yourself** (Xcode or the Command Line Tools):
+
+```bash
+git clone https://github.com/MJAZ93/macsweep && cd macsweep
+app/build-app.sh                  # → app/build/MacSweep.app
+open app/build/MacSweep.app
+```
+
+Settings (⌘,) has the projects folder, the inactivity threshold, the minimum size, the fast scan and the dry run. ⌘R rescans.
+
 ### Options
 
 | flag | default | what |
@@ -126,6 +145,8 @@ Items that are *in use* (Xcode open, emulator running, Chrome open, Gradle daemo
 
 ## Contributing
 
+The app lives in `app/` (Swift Package, no dependencies). `swift test` runs the parser tests, `app/scripts/test-engine.sh` runs the script's app modes against a fake home, and CI builds the app on every push.
+
 The catalog is a list of `add TIER "label" "note" "blocker" handler path…` lines inside `scan()`. Adding a cache is one line. PRs welcome, especially for tools I do not use.
 
 ```bash
@@ -147,6 +168,8 @@ macsweep              # análise: mede tudo, não apaga nada
 macsweep clean        # interactivo: pergunta sim / não por item
 macsweep clean --yes  # pré-selecciona todos os SEGUROS (confirmas no fim)
 ```
+
+Também há uma **app para Mac** (SwiftUI, macOS 13+): a mesma análise e as mesmas regras, mas escolhes tudo com cliques, vês quanto espaço vais ter no fim, revês a lista e escreves `APAGAR` para confirmar. Descarrega o `MacSweep.zip` em [Releases](https://github.com/MJAZ93/macsweep/releases) (da primeira vez abre com clique direito → **Abrir**, porque a app não é notarizada) ou compila com `app/build-app.sh`. A interface segue o idioma do sistema e pode mudar-se nas Definições.
 
 Instalar:
 
