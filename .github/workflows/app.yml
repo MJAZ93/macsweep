@@ -2,7 +2,7 @@ name: macOS app
 
 on:
   push:
-    branches: [main]
+    branches: [main, "feat/**"]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
