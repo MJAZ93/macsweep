@@ -87,6 +87,10 @@ At the end you get a summary with the total and have to type `DELETE` before any
 
 ## Mac app
 
+<p align="center">
+  <img src="docs/app.jpg" alt="MacSweep.app" width="820">
+</p>
+
 Prefer clicking to typing? **MacSweep.app** is a native SwiftUI app with the same catalog and the same rules: everything grouped by tier and sorted by size, a disk bar that shows how much you will have free afterwards, a list of the exact paths behind each item (with **Show in Finder**), a review sheet where you type `DELETE`, and live progress while each item goes. Items in use are greyed out, **Select All Safe** only ever touches SAFE items, and every deletion goes to the same log. The one step that needs an admin password asks for it in the normal macOS dialog. English and Portuguese, light and dark, macOS 13 or newer.
 
 The app does not reimplement anything: it ships the `macsweep` script inside the bundle and runs it, so the CLI and the app always agree on what is safe.

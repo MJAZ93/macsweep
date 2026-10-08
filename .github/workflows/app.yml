@@ -33,14 +33,6 @@ jobs:
         continue-on-error: true
         run: app/scripts/screenshot.sh
 
-      - name: TEMP screenshots to log
-        continue-on-error: true
-        run: |
-          for m in light dark; do
-            sips -s format jpeg -s formatOptions 60 --resampleWidth 1000 app/build/screenshot-$m.png --out /tmp/$m.jpg >/dev/null
-            echo "BEGIN-$m"; base64 -b 120 -i /tmp/$m.jpg; echo "END-$m"
-          done
-
       - uses: actions/upload-artifact@v4
         with:
           name: MacSweep
