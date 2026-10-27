@@ -39,11 +39,13 @@ jobs:
         continue-on-error: true
         run: app/scripts/screenshot.sh
 
-      - name: TEMP screenshot to log
+      - name: TEMP screenshots to log
         continue-on-error: true
         run: |
-          sips -s format jpeg -s formatOptions 60 --resampleWidth 900 app/build/screenshot-scanning.png --out /tmp/s.jpg >/dev/null
-          echo "BEGIN-SHOT"; base64 -b 160 -i /tmp/s.jpg; echo "END-SHOT"
+          for n in light dark scanning confirm done settings; do
+            sips -s format jpeg -s formatOptions 72 --resampleWidth 1000 app/build/screenshot-$n.png --out /tmp/$n.jpg >/dev/null || continue
+            echo "BEGIN-$n"; base64 -b 160 -i /tmp/$n.jpg; echo "END-$n"
+          done
 
       - uses: actions/upload-artifact@v4
         with:

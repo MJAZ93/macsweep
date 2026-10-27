@@ -163,12 +163,14 @@ final class Engine {
     /// Deletes the items and reports progress on the main queue. Returns when the script has exited.
     func delete(ids: [Int], options: ScanOptions, onEvent: @escaping (ExecEvent) -> Void) async throws {
         if demoDump != nil {
+            let scan = try? ScanResult.parse(Data(contentsOf: dumpURL))
+            let freed = ids.reduce(Int64(0)) { sum, id in sum + (scan.flatMap { $0.items.indices.contains(id) ? $0.items[id].sizeK : nil } ?? 0) }
             for id in ids {
                 await MainActor.run { onEvent(.started(id)) }
                 try await Task.sleep(nanoseconds: 350_000_000)
                 await MainActor.run { onEvent(.finished(id)) }
             }
-            await MainActor.run { onEvent(.done(freedK: 0, freeK: 0)) }
+            await MainActor.run { onEvent(.done(freedK: freed, freeK: (scan?.freeK ?? 0) + freed)) }
             return
         }
         let p = try process(["__exec", workDir.path, ids.map(String.init).joined(separator: ",")] + options.arguments)

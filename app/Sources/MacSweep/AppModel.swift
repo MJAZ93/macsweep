@@ -86,9 +86,16 @@ final class AppModel: ObservableObject {
             Task { await checkForUpdates(manual: false) }
         }
         await rescan()
-        if ProcessInfo.processInfo.environment["MACSWEEP_DEMO_SELECT"] == "1" {
+        let env = ProcessInfo.processInfo.environment
+        if env["MACSWEEP_DEMO_SELECT"] == "1" {
             selectAllSafe()
             if let i = items(in: .rebuild).first { selection.insert(i.id) }
+        }
+        switch env["MACSWEEP_DEMO_SHOW"] {  // screenshots of the other screens
+        case "confirm": showConfirm = true
+        case "done": confirmAndDelete()
+        case "settings": NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        default: break
         }
     }
 
