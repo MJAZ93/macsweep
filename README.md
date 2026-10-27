@@ -95,13 +95,22 @@ Prefer clicking to typing? **MacSweep.app** is a native SwiftUI app with the sam
 
 The app does not reimplement anything: it ships the `macsweep` script inside the bundle and runs it, so the CLI and the app always agree on what is safe.
 
-**Install:** download `MacSweep.zip` from [Releases](https://github.com/MJAZ93/macsweep/releases), unzip, drag `MacSweep.app` to Applications. The app is not notarized, so the first time macOS will refuse to open it: right-click it and pick **Open** (on macOS 15, go to *System Settings → Privacy & Security → Open Anyway*), or run `xattr -dr com.apple.quarantine /Applications/MacSweep.app`.
+**Install:** download **[MacSweep.dmg](https://github.com/MJAZ93/macsweep/releases/latest/download/MacSweep.dmg)**, open it and drag MacSweep to Applications.
+
+<p align="center">
+  <img src="docs/dmg.jpg" alt="MacSweep.dmg" width="560">
+</p>
+
+The app is not notarized, so the first time macOS will refuse to open it: right-click it and pick **Open** (on macOS 15, go to *System Settings → Privacy & Security → Open Anyway*), or run `xattr -dr com.apple.quarantine /Applications/MacSweep.app`.
+
+**Update:** the app checks for a new release once a day (or from *MacSweep → Check for Updates…*) and shows an **Update to x.y** button that downloads the new DMG; drag it over the old one. The command line updates by running the install command again.
 
 **Build it yourself** (Xcode or the Command Line Tools):
 
 ```bash
 git clone https://github.com/MJAZ93/macsweep && cd macsweep
 app/build-app.sh                  # → app/build/MacSweep.app
+app/make-dmg.sh                   # optional → app/build/MacSweep.dmg (pip install dmgbuild)
 open app/build/MacSweep.app
 ```
 
@@ -173,7 +182,7 @@ macsweep clean        # interactivo: pergunta sim / não por item
 macsweep clean --yes  # pré-selecciona todos os SEGUROS (confirmas no fim)
 ```
 
-Também há uma **app para Mac** (SwiftUI, macOS 13+): a mesma análise e as mesmas regras, mas escolhes tudo com cliques, vês quanto espaço vais ter no fim, revês a lista e escreves `APAGAR` para confirmar. Descarrega o `MacSweep.zip` em [Releases](https://github.com/MJAZ93/macsweep/releases) (da primeira vez abre com clique direito → **Abrir**, porque a app não é notarizada) ou compila com `app/build-app.sh`. A interface segue o idioma do sistema e pode mudar-se nas Definições.
+Também há uma **app para Mac** (SwiftUI, macOS 13+): a mesma análise e as mesmas regras, mas escolhes tudo com cliques, vês quanto espaço vais ter no fim, revês a lista e escreves `APAGAR` para confirmar. Descarrega o **[MacSweep.dmg](https://github.com/MJAZ93/macsweep/releases/latest/download/MacSweep.dmg)**, abre-o e arrasta o MacSweep para Aplicações (da primeira vez abre com clique direito → **Abrir**, porque a app não é notarizada), ou compila com `app/build-app.sh`. A app avisa quando há uma versão nova. A interface segue o idioma do sistema e pode mudar-se nas Definições.
 
 Instalar:
 
