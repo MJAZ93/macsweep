@@ -16,7 +16,8 @@ fail=0
 check() {  # $1 = name, $2 = keys to type, rest = extra flags
   local name="$1" keys="$2"; shift 2
   local out="$T/$name.out"
-  printf '%s' "$keys" | HOME="$H" script -q /dev/null /bin/bash "$ROOT/macsweep" clean --dry-run --fast --min-mb 1 --lang en "$@" > "$out" 2>&1
+  # perl alarm: never hang CI if the script waits for a key nobody types
+  printf '%s' "$keys" | HOME="$H" perl -e 'alarm shift; exec @ARGV' 600 script -q /dev/null /bin/bash "$ROOT/macsweep" clean --dry-run --fast --min-mb 1 --lang en "$@" > "$out" 2>&1
   if grep -q "DRY RUN" "$out" && ! grep -qiE "unbound variable|syntax error|command not found" "$out"; then
     echo "ok   $name"
   else
@@ -24,7 +25,7 @@ check() {  # $1 = name, $2 = keys to type, rest = extra flags
   fi
 }
 check "yes then rest-no" "yr"      # items after 'r' are listed without a prompt
-check "all safe"         "a"       # items after 'a' are auto-selected
+check "all safe"         "ar"      # items after 'a' are auto-selected, then rest no
 [ -d "$H/.npm/_cacache" ] || { echo "FAIL dry run deleted something"; fail=1; }
 echo "$(/bin/bash --version | head -1)"
 exit $fail
