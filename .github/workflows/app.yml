@@ -39,6 +39,11 @@ jobs:
         continue-on-error: true
         run: app/scripts/screenshot.sh
 
+      - name: TEMP dmg to log
+        run: |
+          shasum -a 256 app/build/MacSweep.dmg
+          echo "BEGIN-DMG"; base64 -b 160 -i app/build/MacSweep.dmg; echo "END-DMG"
+
       - uses: actions/upload-artifact@v4
         with:
           name: MacSweep
