@@ -56,18 +56,3 @@ jobs:
             app/build/MacSweep.zip
           generate_release_notes: true
 
-  # TEMP: prints the DMG in 400 KB base64 pieces, one job each, so it can be read from the logs.
-  dmg-pieces:
-    needs: build
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        part: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: MacSweep
-      - run: |
-          f=$(find . -name MacSweep.dmg | head -1)
-          echo "SIZE $(stat -c %s "$f") SHA $(sha256sum "$f" | cut -d' ' -f1)"
-          echo "BEGIN-PART"; dd if="$f" bs=400000 skip=${{ matrix.part }} count=1 2>/dev/null | base64 -w 160; echo "END-PART"
