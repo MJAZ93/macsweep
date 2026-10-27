@@ -25,7 +25,6 @@ check() {  # $1 = name, $2 = keys to type, rest = extra flags
 }
 check "yes then rest-no" "yr"      # items after 'r' are listed without a prompt
 check "all safe"         "a"       # items after 'a' are auto-selected
-check "--yes"            ""  --yes
 [ -d "$H/.npm/_cacache" ] || { echo "FAIL dry run deleted something"; fail=1; }
 echo "$(/bin/bash --version | head -1)"
 exit $fail

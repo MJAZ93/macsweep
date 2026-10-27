@@ -403,9 +403,9 @@ select_items() {
     echo; printf '  %s\n' "$(badge "$tier")"; line
     for i in $(sorted_idx "$tier"); do
       n=$((n+1))
-      if [ -n "${I_BLOCK[$i]}" ] || [ "${I_HANDLER[$i]}" = "none" ]; then print_item "$i" "$n" "$D·$R"; continue; fi
-      if [ $rest_no -eq 1 ]; then print_item "$i" "$n" "$D·$R"; continue; fi
-      if [ "$tier" = "SAFE" ] && { [ $all_safe -eq 1 ] || [ $AUTO_YES -eq 1 ]; }; then I_SEL[$i]=1; print_item "$i" "$n" "$GRN✔$R"; continue; fi
+      if [ -n "${I_BLOCK[$i]}" ] || [ "${I_HANDLER[$i]}" = "none" ]; then print_item "$i" "$n" "${D}·${R}"; continue; fi
+      if [ $rest_no -eq 1 ]; then print_item "$i" "$n" "${D}·${R}"; continue; fi
+      if [ "$tier" = "SAFE" ] && { [ $all_safe -eq 1 ] || [ $AUTO_YES -eq 1 ]; }; then I_SEL[$i]=1; print_item "$i" "$n" "${GRN}✔${R}"; continue; fi
       print_item "$i" "$n" " "
       while :; do
         ask; rc=$?
