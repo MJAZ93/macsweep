@@ -2,6 +2,11 @@
   <img src="docs/demo-scan.svg" alt="macsweep scan" width="820">
 </p>
 
+<p align="center">
+  <b>Terminal or <a href="#mac-app">Mac app</a>:</b> same catalog, same rules.<br><br>
+  <img src="docs/app.jpg" alt="MacSweep.app" width="720">
+</p>
+
 <h1 align="center">macsweep</h1>
 
 <p align="center">
@@ -88,8 +93,27 @@ At the end you get a summary with the total and have to type `DELETE` before any
 ## Mac app
 
 <p align="center">
-  <img src="docs/app.jpg" alt="MacSweep.app" width="820">
+  <img src="docs/app.jpg" alt="MacSweep.app: items grouped by tier, sorted by size" width="820">
 </p>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/app-dark.jpg" alt="Dark mode"></td>
+    <td width="50%"><img src="docs/app-confirm.jpg" alt="Review sheet: type DELETE to confirm"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Dark mode. Items in use (Xcode open) are greyed out.</sub></td>
+    <td align="center"><sub>Review sheet: nothing is deleted until you type <code>DELETE</code>.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/app-done.jpg" alt="Result: space freed"></td>
+    <td width="50%"><img src="docs/dmg.jpg" alt="MacSweep.dmg"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Live progress, then how much was freed.</sub></td>
+    <td align="center"><sub>Install: drag MacSweep to Applications.</sub></td>
+  </tr>
+</table>
 
 Prefer clicking to typing? **MacSweep.app** is a native SwiftUI app with the same catalog and the same rules: everything grouped by tier and sorted by size, a disk bar that shows how much you will have free afterwards, a list of the exact paths behind each item (with **Show in Finder**), a review sheet where you type `DELETE`, and live progress while each item goes. Items in use are greyed out, **Select All Safe** only ever touches SAFE items, and every deletion goes to the same log. The one step that needs an admin password asks for it in the normal macOS dialog. English and Portuguese, light and dark, macOS 13 or newer.
 
@@ -97,11 +121,13 @@ The app does not reimplement anything: it ships the `macsweep` script inside the
 
 **Install:** download **[MacSweep.dmg](https://github.com/MJAZ93/macsweep/releases/latest/download/MacSweep.dmg)**, open it and drag MacSweep to Applications.
 
-<p align="center">
-  <img src="docs/dmg.jpg" alt="MacSweep.dmg" width="560">
-</p>
+The app is not notarized, so the first time macOS says it *could not verify "MacSweep"*. Click **Done**, then either run
 
-The app is not notarized, so the first time macOS will refuse to open it: right-click it and pick **Open** (on macOS 15, go to *System Settings → Privacy & Security → Open Anyway*), or run `xattr -dr com.apple.quarantine /Applications/MacSweep.app`.
+```bash
+xattr -dr com.apple.quarantine /Applications/MacSweep.app && open /Applications/MacSweep.app
+```
+
+or open *System Settings → Privacy & Security*, scroll down and click **Open Anyway**.
 
 **Update:** the app checks for a new release once a day (or from *MacSweep → Check for Updates…*) and shows an **Update to x.y** button that downloads the new DMG; drag it over the old one. The command line updates by running the install command again.
 

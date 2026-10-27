@@ -39,14 +39,6 @@ jobs:
         continue-on-error: true
         run: app/scripts/screenshot.sh
 
-      - name: TEMP screenshots to log
-        continue-on-error: true
-        run: |
-          for n in light dark scanning confirm done settings; do
-            sips -s format jpeg -s formatOptions 72 --resampleWidth 1000 app/build/screenshot-$n.png --out /tmp/$n.jpg >/dev/null || continue
-            echo "BEGIN-$n"; base64 -b 160 -i /tmp/$n.jpg; echo "END-$n"
-          done
-
       - uses: actions/upload-artifact@v4
         with:
           name: MacSweep
@@ -64,18 +56,3 @@ jobs:
             app/build/MacSweep.zip
           generate_release_notes: true
 
-  # TEMP: prints the DMG in 400 KB base64 pieces, one job each, so it can be read from the logs.
-  dmg-pieces:
-    needs: build
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        part: [0, 1, 2, 3, 4]
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: MacSweep
-      - run: |
-          f=$(find . -name MacSweep.dmg | head -1)
-          echo "SIZE $(stat -c %s "$f") SHA $(sha256sum "$f" | cut -d' ' -f1)"
-          echo "BEGIN-PART"; dd if="$f" bs=400000 skip=${{ matrix.part }} count=1 2>/dev/null | base64 -w 160; echo "END-PART"

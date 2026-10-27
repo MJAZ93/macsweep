@@ -1,6 +1,6 @@
 #!/bin/bash
 # Opens the built app on demo data and captures its screens into app/build/screenshot-*.png:
-#   main (light), dark, scanning, confirm, done, settings
+#   light, dark, scanning, confirm, done
 set -eu
 cd "$(dirname "$0")/.."
 python3 scripts/demo-scan.py build/demo.dat
@@ -24,5 +24,4 @@ shot dark     dark  3 --largest
 shot scanning dark  3 --largest MACSWEEP_DEMO_DELAY=60
 shot confirm  light 4 --largest MACSWEEP_DEMO_SHOW=confirm
 shot done     light 9 --largest MACSWEEP_DEMO_SHOW=done
-shot settings light 4 --front   MACSWEEP_DEMO_SHOW=settings
 ls -la build/screenshot-*.png
