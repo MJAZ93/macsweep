@@ -41,6 +41,8 @@ struct ContentView: View {
                 Spacer()
             }
         }
+        // fill the window even before the first scan, so the overlay below is full width
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay {
             if model.phase == .scanning { ScanningOverlay() }
         }
@@ -310,9 +312,12 @@ struct ScanningOverlay: View {
                 ProgressView().controlSize(.large)
                 Text(model.t.measuring).font(.title3.weight(.semibold))
                 Text(model.t.measuringSub).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            .frame(maxWidth: 420)
             .padding(40)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .transition(.opacity)
     }
 }

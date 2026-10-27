@@ -143,7 +143,8 @@ final class Engine {
 
     func scan(_ options: ScanOptions) async throws -> ScanResult {
         if let demoDump {
-            try await Task.sleep(nanoseconds: 600_000_000)
+            let delay = Double(ProcessInfo.processInfo.environment["MACSWEEP_DEMO_DELAY"] ?? "") ?? 0.6
+            try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             try FileManager.default.copyItem(at: demoDump, to: dumpURL.appendingPathExtension("demo"))
             try? FileManager.default.removeItem(at: dumpURL)
             try FileManager.default.moveItem(at: dumpURL.appendingPathExtension("demo"), to: dumpURL)
