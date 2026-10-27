@@ -1,0 +1,19 @@
+name: CLI
+
+on:
+  push:
+    branches: [main, "fix/**", "feat/**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax (bash 3.2)
+        run: /bin/bash --version | head -1 && /bin/bash -n macsweep && /bin/bash -n install.sh
+      - name: Scan
+        run: /bin/bash ./macsweep --fast --no-color
+      - name: Clean flow (dry run)
+        run: tests/test-clean.sh
