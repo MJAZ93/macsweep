@@ -38,15 +38,6 @@ jobs:
         continue-on-error: true
         run: app/scripts/screenshot.sh
 
-      - name: TEMP dmg screenshot to log
-        continue-on-error: true
-        run: |
-          hdiutil attach app/build/MacSweep.dmg
-          open /Volumes/MacSweep; sleep 6
-          id=$(cd app && swift scripts/window-id.swift Finder) && screencapture -x -o -l "$id" /tmp/dmg.png || screencapture -x /tmp/dmg.png
-          sips -s format jpeg -s formatOptions 70 --resampleWidth 900 /tmp/dmg.png --out /tmp/dmg.jpg >/dev/null
-          echo "BEGIN-dmg"; base64 -b 120 -i /tmp/dmg.jpg; echo "END-dmg"
-
       - uses: actions/upload-artifact@v4
         with:
           name: MacSweep
