@@ -24,6 +24,14 @@ final class AppModel: ObservableObject {
     @Published var showConfirm = false
     @Published var run: DeleteRun?
 
+    // updates
+    enum UpdateNotice: Identifiable {
+        case available(Release), upToDate(String), failed(String)
+        var id: String { "\(self)" }
+    }
+    @Published private(set) var update: Release?
+    @Published var updateNotice: UpdateNotice?
+
     // settings (persisted)
     @Published var langSetting: String { didSet { defaults.set(langSetting, forKey: "lang") } }
     @Published var projects: String { didSet { defaults.set(projects, forKey: "projects") } }
@@ -74,6 +82,9 @@ final class AppModel: ObservableObject {
     func start() async {
         guard !started else { return }
         started = true
+        if ProcessInfo.processInfo.environment["MACSWEEP_DEMO_DUMP"] == nil {
+            Task { await checkForUpdates(manual: false) }
+        }
         await rescan()
         if ProcessInfo.processInfo.environment["MACSWEEP_DEMO_SELECT"] == "1" {
             selectAllSafe()
@@ -127,6 +138,30 @@ final class AppModel: ObservableObject {
         run = nil
         Task { await rescan() }
     }
+
+    /// Automatic checks run at most once a day and stay silent unless there is a newer version.
+    func checkForUpdates(manual: Bool) async {
+        guard let current = Updater.currentVersion else {
+            if manual { updateNotice = .failed(t.updateDevBuild) }
+            return
+        }
+        let lastKey = "lastUpdateCheck"
+        if !manual, let last = defaults.object(forKey: lastKey) as? Date, Date().timeIntervalSince(last) < 86_400 { return }
+        do {
+            let latest = try await Updater.latest()
+            defaults.set(Date(), forKey: lastKey)
+            if Updater.isNewer(latest.version, than: current) {
+                update = latest
+                if manual { updateNotice = .available(latest) }
+            } else if manual {
+                updateNotice = .upToDate(current)
+            }
+        } catch {
+            if manual { updateNotice = .failed(error.localizedDescription) }
+        }
+    }
+
+    func download(_ release: Release) { NSWorkspace.shared.open(release.url) }
 
     func revealInFinder(_ path: String) {
         let url = URL(fileURLWithPath: path)

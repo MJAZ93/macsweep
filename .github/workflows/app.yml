@@ -29,14 +29,29 @@ jobs:
       - name: Build MacSweep.app
         run: app/build-app.sh
 
+      - name: Build MacSweep.dmg
+        run: |
+          python3 -m venv /tmp/dmgenv && /tmp/dmgenv/bin/pip install --quiet dmgbuild
+          DMGBUILD=/tmp/dmgenv/bin/dmgbuild app/make-dmg.sh
+
       - name: Screenshots (demo data)
         continue-on-error: true
         run: app/scripts/screenshot.sh
+
+      - name: TEMP dmg screenshot to log
+        continue-on-error: true
+        run: |
+          hdiutil attach app/build/MacSweep.dmg
+          open /Volumes/MacSweep; sleep 6
+          id=$(cd app && swift scripts/window-id.swift Finder) && screencapture -x -o -l "$id" /tmp/dmg.png || screencapture -x /tmp/dmg.png
+          sips -s format jpeg -s formatOptions 70 --resampleWidth 900 /tmp/dmg.png --out /tmp/dmg.jpg >/dev/null
+          echo "BEGIN-dmg"; base64 -b 120 -i /tmp/dmg.jpg; echo "END-dmg"
 
       - uses: actions/upload-artifact@v4
         with:
           name: MacSweep
           path: |
+            app/build/MacSweep.dmg
             app/build/MacSweep.zip
             app/build/screenshot-*.png
 
@@ -44,4 +59,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: app/build/MacSweep.zip
+          files: |
+            app/build/MacSweep.dmg
+            app/build/MacSweep.zip
+          generate_release_notes: true

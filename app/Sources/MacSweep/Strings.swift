@@ -77,6 +77,20 @@ struct Strings {
     var errorTitle: String { s("Something went wrong", "Algo correu mal") }
     var tryAgain: String { s("Try Again", "Tentar de novo") }
 
+    // updates
+    var checkForUpdates: String { s("Check for Updates…", "Procurar actualizações…") }
+    func updateTo(_ v: String) -> String { s("Update to \(v)", "Actualizar para \(v)") }
+    func updateAvailableTitle(_ v: String) -> String { s("MacSweep \(v) is available", "O MacSweep \(v) está disponível") }
+    var updateAvailableMessage: String { s("Download it, open the DMG and drag MacSweep to Applications to replace this version.",
+                                           "Descarrega, abre o DMG e arrasta o MacSweep para Aplicações para substituir esta versão.") }
+    var download: String { s("Download", "Descarregar") }
+    var later: String { s("Later", "Mais tarde") }
+    var upToDateTitle: String { s("MacSweep is up to date", "O MacSweep está actualizado") }
+    func upToDateMessage(_ v: String) -> String { s("Version \(v) is the latest.", "A versão \(v) é a mais recente.") }
+    var updateFailedTitle: String { s("Could not check for updates", "Não foi possível procurar actualizações") }
+    var updateDevBuild: String { s("This build has no version number.", "Esta compilação não tem número de versão.") }
+    var ok: String { "OK" }
+
     // settings
     var language: String { s("Language", "Idioma") }
     var automatic: String { s("Automatic", "Automático") }

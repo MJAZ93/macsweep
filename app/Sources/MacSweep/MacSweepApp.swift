@@ -14,6 +14,9 @@ struct MacSweepApp: App {
         }
         .defaultSize(width: 980, height: 820)
         .commands {
+            CommandGroup(after: .appInfo) {
+                Button(model.t.checkForUpdates) { Task { await model.checkForUpdates(manual: true) } }
+            }
             CommandGroup(replacing: .newItem) {
                 Button(model.t.rescan) { Task { await model.rescan() } }
                     .keyboardShortcut("r")

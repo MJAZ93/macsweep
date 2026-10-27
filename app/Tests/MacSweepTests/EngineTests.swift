@@ -44,6 +44,20 @@ final class EngineTests: XCTestCase {
         XCTAssertEqual(o.arguments, ["--days", "10", "--min-mb", "0", "--lang", "pt", "--projects", "/p q", "--fast", "--dry-run"])
     }
 
+    func testVersionCompare() {
+        XCTAssertTrue(Updater.isNewer("1.10.0", than: "1.9.2"))
+        XCTAssertTrue(Updater.isNewer("1.1.1", than: "1.1"))
+        XCTAssertFalse(Updater.isNewer("1.1", than: "1.1.0"))
+        XCTAssertFalse(Updater.isNewer("1.0.9", than: "1.1.0"))
+    }
+
+    func testParsesRelease() throws {
+        let json = #"{"tag_name":"v1.2.0","html_url":"https://github.com/MJAZ93/macsweep/releases/tag/v1.2.0","assets":[{"name":"MacSweep.zip","browser_download_url":"https://x/MacSweep.zip"},{"name":"MacSweep.dmg","browser_download_url":"https://x/MacSweep.dmg"}]}"#
+        let r = try Updater.parse(Data(json.utf8))
+        XCTAssertEqual(r.version, "1.2.0")
+        XCTAssertEqual(r.url.absoluteString, "https://x/MacSweep.dmg")
+    }
+
     func testHumanSize() {
         XCTAssertEqual(humanSize(512), "512 KB")
         XCTAssertEqual(humanSize(81920), "80 MB")

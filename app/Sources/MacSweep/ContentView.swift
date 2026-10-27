@@ -46,6 +46,16 @@ struct ContentView: View {
         }
         .animation(.easeInOut(duration: 0.18), value: model.selection.isEmpty)
         .toolbar {
+            if let update = model.update {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { model.download(update) } label: {
+                        Label(t.updateTo(update.version), systemImage: "arrow.down.circle.fill")
+                            .labelStyle(.titleAndIcon)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .help(t.updateAvailableMessage)
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button { Task { await model.rescan() } } label: {
                     Label(t.rescan, systemImage: "arrow.clockwise")
@@ -56,6 +66,18 @@ struct ContentView: View {
         }
         .sheet(isPresented: $model.showConfirm) { ConfirmSheet().environmentObject(model) }
         .sheet(item: $model.run) { _ in ProgressSheet().environmentObject(model) }
+        .alert(item: $model.updateNotice) { notice in
+            switch notice {
+            case .available(let r):
+                return Alert(title: Text(t.updateAvailableTitle(r.version)), message: Text(t.updateAvailableMessage),
+                             primaryButton: .default(Text(t.download)) { model.download(r) },
+                             secondaryButton: .cancel(Text(t.later)))
+            case .upToDate(let v):
+                return Alert(title: Text(t.upToDateTitle), message: Text(t.upToDateMessage(v)), dismissButton: .default(Text(t.ok)))
+            case .failed(let msg):
+                return Alert(title: Text(t.updateFailedTitle), message: Text(msg), dismissButton: .default(Text(t.ok)))
+            }
+        }
         .task { await model.start() }
     }
 }
